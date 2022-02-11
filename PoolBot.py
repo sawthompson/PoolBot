@@ -169,5 +169,4 @@ class PoolBot(discord.Client):
 				if (mentionedUser.id == user_id and "```" in message.content):
 					pack_content = message.content.split("```")[1].strip()
 					packs.append(pack_content)
-		print(packs)
 		return packs
