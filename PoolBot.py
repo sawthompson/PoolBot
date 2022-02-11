@@ -82,6 +82,21 @@ class PoolBot(discord.Client):
 						f":hourglass: Searching for user's pool..."
 					)
 			pool = await self.find_pool(member.id)
+			if (pool == 'nopool'):
+				await update_message(m,
+							f"{message.author.mention}\n"
+							f"Unable to find pool for user. Are you sure they are in the\n"
+							f"current league?"
+						)
+				return
+			if (pool == 'error'):
+				await update_message(m,
+							f"{message.author.mention}\n"
+							f"Unable to find pool for user. This likely means that no\n"
+							f"sealeddeck.tech link was generated for them with their pool.\n"
+							f"You'll have to scout them manually. Sorry!"
+						)
+				return
 
 			await update_message(m,
 						f"{message.author.mention}\n"
@@ -135,13 +150,16 @@ class PoolBot(discord.Client):
 			await message.channel.send('Command received but not yet implemented.')
 
 	async def find_pool(self, user_id):
-		async for message in self.pool_channel.history(limit = 200, after = self.league_start).filter(lambda message : message.author.name == 'Booster Tutor'):
+		async for message in self.pool_channel.history(limit = 1000, after = self.league_start).filter(lambda message : message.author.name == 'Booster Tutor'):
 			for mentionedUser in message.mentions:
 				if (mentionedUser.id == user_id):
-					# Use a regex to pull the sealeddeck code out of the message
-					# TODO(sawyer): Make sure this is robust
+					# Handle cases where Booster Tutor fails to generate a sealeddeck.tech link
+					if ('**Sealeddeck.tech:** Error' in message.content):
+						return 'error'
+					# Use a regex to pull the sealeddeck id out of the message
 					link = re.search("(?P<url>https?://[^\s]+)", message.content).group("url").split('sealeddeck.tech/')[1]
 					return link
+		return 'nopool'
 
 	async def find_packs(self, user_id):
 		packs = []
