@@ -125,7 +125,10 @@ class PoolBot(discord.Client):
 					f"Found {len(packs)} pack(s) and added them to the user's pool.\n\n"
 					f"**Generated sealeddeck.tech pool**\n"
 					f"link: https://sealeddeck.tech/{new_id}\n"
-					f"ID: `{new_id}`"
+					f"ID: `{new_id}`\n"
+					f"Note: This is still an experimental bot, and generated pools may\n"
+					f"not be accurate. Please contact Sawyer T with any questions or if\n"
+					f"you encounter any issues."
 				)
 			await update_message(m, content)
 		if message.content.startswith('!setLeagueStartTime'):
