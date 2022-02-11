@@ -97,13 +97,21 @@ class PoolBot(discord.Client):
 							f"Starting pool link: https://sealeddeck.tech/{pool}"
 						)
 				return
-			pack_json = arena_to_json('\n'.join(packs))
 			await update_message(m,
 						f"{message.author.mention}\n"
 						f":hourglass: Found punishment pack(s). Adding to pool..."
 					)
 			try:
-				new_id = await pool_to_sealeddeck(pack_json, pool)
+				if (len(packs) < 8):
+					pack_json = arena_to_json('\n'.join(packs))
+					new_id = await pool_to_sealeddeck(pack_json, pool)
+				else:
+					# Sealeddeck seems to be unable to handle adding more than 8 packs at a time.
+					# For large pools, split the pack-adding into two separate requests.
+					first_half_pack_json = arena_to_json('\n'.join(packs[:6]))
+					second_half_pack_json = arena_to_json('\n'.join(packs[6:]))
+					first_half_new_id = await pool_to_sealeddeck(first_half_pack_json, pool)
+					new_id = await pool_to_sealeddeck(second_half_pack_json, first_half_new_id)
 			except aiohttp.ClientResponseError as e:
 				print(e)
 				content = (
@@ -115,7 +123,7 @@ class PoolBot(discord.Client):
 				content = (
 					f"{message.author.mention}\n"
 					f"Found {len(packs)} pack(s) and added them to the user's pool.\n\n"
-					f"**Updated sealeddeck.tech pool**\n"
+					f"**Generated sealeddeck.tech pool**\n"
 					f"link: https://sealeddeck.tech/{new_id}\n"
 					f"ID: `{new_id}`"
 				)
