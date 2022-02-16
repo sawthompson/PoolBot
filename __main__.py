@@ -1,4 +1,5 @@
 import argparse
+import discord
 from utils import get_config
 from pathlib import Path
 from PoolBot import PoolBot
@@ -18,7 +19,9 @@ def main():
 	)
 	args = parser.parse_args()
 	config = get_config(Path(args.config))
-	bot = PoolBot(config)
+	intents = discord.Intents.default()
+	intents.members = True
+	bot = PoolBot(config, intents)
 	bot.run(config.discord_token)
 
 if __name__ == "__main__":

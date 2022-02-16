@@ -43,11 +43,11 @@ async def update_message(message, new_content):
 	return await message.edit(content=new_content)
 
 class PoolBot(discord.Client):
-	def __init__(self, config: utils.Config, *args, **kwargs):
+	def __init__(self, config: utils.Config, intents: discord.Intents, *args, **kwargs):
 		self.config = config
 		# TODO(sawyer): Allow this to be set with a command by Arena Sealed League admins
 		self.league_start = datetime.fromisoformat('2022-01-04')
-		super().__init__(*args, **kwargs)
+		super().__init__(intents=intents, *args, **kwargs)
 
 	async def on_ready(self):
 		print(f'{self.user} has connected to Discord!')
@@ -71,6 +71,9 @@ class PoolBot(discord.Client):
 		command = argv[0].lower()
 		if len(message.mentions):
 			member = message.mentions[0]
+		elif (command == '!viewpool'):
+			# Support viewing the pool of a user by referencing their ID instead of mentioning them
+			member = self.guilds[0].get_member_named(argv[1])
 		else:
 			member = message.author
 
