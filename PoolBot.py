@@ -74,6 +74,13 @@ class PoolBot(discord.Client):
 		elif command == '!viewpool':
 			# Support viewing the pool of a user by referencing their name instead of mentioning them
 			member = self.guilds[0].get_member_named(argv[1])
+			if member == None:
+				await message.channel.send(
+						f"{message.author.mention}\n"
+						f"No user could be found with that name. Make sure you're using\n"
+						f"their discord identifying name, and not their guild nickname."
+					)
+			return
 		else:
 			member = message.author
 
@@ -166,7 +173,6 @@ class PoolBot(discord.Client):
                 f"search for pools and packs. Takes in a date in the form YYYY-MM-DD\n"
                 f"> `!help`: shows this message\n"
 			)
-
 
 	async def find_pool(self, user_id):
 		async for message in self.pool_channel.history(limit = 1000, after = self.league_start).filter(lambda message : message.author.name == 'Booster Tutor'):
