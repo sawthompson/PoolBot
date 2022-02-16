@@ -59,9 +59,9 @@ class PoolBot(discord.Client):
 				self.pool_channel = channel
 			if (channel.name == 'pack-generation'):
 				self.packs_channel = channel
-		if (self.pool_channel == None):
+		if self.pool_channel == None:
 			print('Could not find starting-pools channel')
-		if (self.packs_channel == None):
+		if self.packs_channel == None:
 			print('Could not find pack-generation channel')
 
 	async def on_message(self, message):
@@ -71,13 +71,13 @@ class PoolBot(discord.Client):
 		command = argv[0].lower()
 		if len(message.mentions):
 			member = message.mentions[0]
-		elif (command == '!viewpool'):
-			# Support viewing the pool of a user by referencing their ID instead of mentioning them
+		elif command == '!viewpool':
+			# Support viewing the pool of a user by referencing their name instead of mentioning them
 			member = self.guilds[0].get_member_named(argv[1])
 		else:
 			member = message.author
 
-		if (message.channel.name == '#bot-lab'):
+		if message.channel.name == '#bot-lab':
 			return
 		if command == '!viewpool':
 			m = await message.channel.send(
@@ -108,7 +108,7 @@ class PoolBot(discord.Client):
 
 			packs = await self.find_packs(member.id)
 
-			if (len(packs) == 0):
+			if len(packs) == 0:
 				await update_message(m,
 							f"{message.author.mention}\n"
 							f"No punishment packs could be found.\n"
@@ -120,7 +120,7 @@ class PoolBot(discord.Client):
 						f":hourglass: Found punishment pack(s). Adding to pool..."
 					)
 			try:
-				if (len(packs) < 8):
+				if len(packs) < 8:
 					pack_json = arena_to_json('\n'.join(packs))
 					new_id = await pool_to_sealeddeck(pack_json, pool)
 				else:
@@ -149,12 +149,24 @@ class PoolBot(discord.Client):
 					f"you encounter any issues."
 				)
 			await update_message(m, content)
-		if message.content.startswith('!setLeagueStartTime'):
+		elif command == '!setLeagueStartTime':
 			self.league_start = datetime.fromisoformat(argv[1])
 			await message.channel.send(
 				f"League start time updated to {argv[1]}. Commands will now only look\n"
 				f"for packs after that date."
 			)
+		elif command == '!help':
+			await message.channel.send(
+				f"You can give me one of the following commands:\n"
+                f"> `!viewpool {{user}}`: finds and displays the pool, including "
+                f"punishment packs, for a given user. Can reference a user either "
+                f"through an @mention or by their discord name (displayed on their "
+                f"below their nickname, e.g. 'sawyer#8108'\n"
+                f"> `!setLeagueStartTime`: updates the league start time used to "
+                f"search for pools and packs. Takes in a date in the form YYYY-MM-DD\n"
+                f"> `!help`: shows this message\n"
+			)
+
 
 	async def find_pool(self, user_id):
 		async for message in self.pool_channel.history(limit = 1000, after = self.league_start).filter(lambda message : message.author.name == 'Booster Tutor'):
