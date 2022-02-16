@@ -147,7 +147,11 @@ class PoolBot(discord.Client):
 				)
 			await update_message(m, content)
 		if message.content.startswith('!setLeagueStartTime'):
-			await message.channel.send('Command received but not yet implemented.')
+			self.league_start = datetime.fromisoformat(argv[1])
+			await message.channel.send(
+				f"League start time updated to {argv[1]}. Commands will now only look\n"
+				f"for packs after that date."
+			)
 
 	async def find_pool(self, user_id):
 		async for message in self.pool_channel.history(limit = 1000, after = self.league_start).filter(lambda message : message.author.name == 'Booster Tutor'):
