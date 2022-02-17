@@ -65,6 +65,8 @@ class PoolBot(discord.Client):
 			print('Could not find pack-generation channel')
 
 	async def on_message(self, message):
+		if message.channel.name != 'bot-lab':
+			return
 		# Remove the prefix '!' and split the string on spaces
 		argv = message.content.split()
 		assert len(argv)
@@ -80,12 +82,10 @@ class PoolBot(discord.Client):
 						f"No user could be found with that name. Make sure you're using\n"
 						f"their discord identifying name, and not their guild nickname."
 					)
-			return
+				return
 		else:
 			member = message.author
 
-		if message.channel.name == '#bot-lab':
-			return
 		if command == '!viewpool':
 			m = await message.channel.send(
 						f"{message.author.mention}\n"
@@ -156,7 +156,7 @@ class PoolBot(discord.Client):
 					f"you encounter any issues."
 				)
 			await update_message(m, content)
-		elif command == '!setLeagueStartTime':
+		elif command == '!setleaguestarttime':
 			self.league_start = datetime.fromisoformat(argv[1])
 			await message.channel.send(
 				f"League start time updated to {argv[1]}. Commands will now only look\n"
