@@ -67,20 +67,27 @@ class PoolBot(discord.Client):
 	async def on_message(self, message):
 		if message.channel.name != 'bot-lab':
 			return
+
 		# Remove the prefix '!' and split the string on spaces
 		argv = message.content.split()
 		assert len(argv)
 		command = argv[0].lower()
+		if '"' in message.content:
+			# Support arguments passed in quotes
+			argument = message.content.split('"')[1]
+		elif ' ' in message.content:
+			argument = argv[1]
 		if len(message.mentions):
 			member = message.mentions[0]
 		elif command == '!viewpool':
 			# Support viewing the pool of a user by referencing their name instead of mentioning them
-			member = self.guilds[0].get_member_named(argv[1])
+			member = self.guilds[0].get_member_named(argument)
 			if member == None:
 				await message.channel.send(
 						f"{message.author.mention}\n"
-						f"No user could be found with that name. Make sure you're using\n"
-						f"their discord identifying name, and not their guild nickname."
+						f"No user could be found with that name. Make sure you're using "
+						f"their discord identifying name, and not their guild nickname. "
+						f"Names with spaces must be surrounded by quotes.\n"
 					)
 				return
 		else:
@@ -95,15 +102,15 @@ class PoolBot(discord.Client):
 			if (pool == 'nopool'):
 				await update_message(m,
 							f"{message.author.mention}\n"
-							f"Unable to find pool for user. Are you sure they are in the\n"
+							f"Unable to find pool for user. Are you sure they are in the "
 							f"current league?"
 						)
 				return
 			if (pool == 'error'):
 				await update_message(m,
 							f"{message.author.mention}\n"
-							f"Unable to find pool for user. This likely means that no\n"
-							f"sealeddeck.tech link was generated for them with their pool.\n"
+							f"Unable to find pool for user. This likely means that no "
+							f"sealeddeck.tech link was generated for them with their pool. "
 							f"You'll have to scout them manually. Sorry!"
 						)
 				return
@@ -118,7 +125,7 @@ class PoolBot(discord.Client):
 			if len(packs) == 0:
 				await update_message(m,
 							f"{message.author.mention}\n"
-							f"No punishment packs could be found.\n"
+							f"No punishment packs could be found. "
 							f"Starting pool link: https://sealeddeck.tech/{pool}"
 						)
 				return
@@ -151,15 +158,15 @@ class PoolBot(discord.Client):
 					f"**Generated sealeddeck.tech pool**\n"
 					f"link: https://sealeddeck.tech/{new_id}\n"
 					f"ID: `{new_id}`\n"
-					f"Note: This is still an experimental bot, and generated pools may\n"
-					f"not be accurate. Please contact Sawyer T with any questions or if\n"
+					f"Note: This is still an experimental bot, and generated pools may "
+					f"not be accurate. Please contact Sawyer T with any questions or if "
 					f"you encounter any issues."
 				)
 			await update_message(m, content)
 		elif command == '!setleaguestarttime':
-			self.league_start = datetime.fromisoformat(argv[1])
+			self.league_start = datetime.fromisoformat(argument)
 			await message.channel.send(
-				f"League start time updated to {argv[1]}. Commands will now only look\n"
+				f"League start time updated to {argument}. Commands will now only look "
 				f"for packs after that date."
 			)
 		elif command == '!help':
@@ -168,7 +175,8 @@ class PoolBot(discord.Client):
                 f"> `!viewpool {{user}}`: finds and displays the pool, including "
                 f"punishment packs, for a given user. Can reference a user either "
                 f"through an @mention or by their discord name (displayed on their "
-                f"below their nickname, e.g. 'sawyer#8108'\n"
+                f"below their nickname, e.g. 'sawyer#8108'. For users with spaces in "
+                f"their names, use quotes, e.g. `!viewpool \"Soy Boy#1234\"`\n"
                 f"> `!setLeagueStartTime`: updates the league start time used to "
                 f"search for pools and packs. Takes in a date in the form YYYY-MM-DD\n"
                 f"> `!help`: shows this message\n"
