@@ -53,21 +53,24 @@ class PoolBot(discord.Client):
 		print(f'{self.user} has connected to Discord!')
 		self.pool_channel = None
 		self.packs_channel = None
+		self.pending_lfm_user_mention = None
+		self.active_lfm_message = None
 		# Safe to assume that there's only one guild, because this is a very specific bot.
 		for channel in self.guilds[0].channels:
 			if (channel.name == 'starting-pools'):
 				self.pool_channel = channel
 			if (channel.name == 'pack-generation'):
 				self.packs_channel = channel
+			if (channel.name == 'bot-lab'):
+				self.bot_lab = channel
 		if self.pool_channel == None:
 			print('Could not find starting-pools channel')
 		if self.packs_channel == None:
 			print('Could not find pack-generation channel')
+		if self.packs_channel == None:
+			print('Could not find bot-lab channel')
 
 	async def on_message(self, message):
-		if message.channel.name != 'bot-lab':
-			return
-
 		# Remove the prefix '!' and split the string on spaces
 		argv = message.content.split()
 		assert len(argv)
@@ -79,7 +82,20 @@ class PoolBot(discord.Client):
 			argument = argv[1]
 		if len(message.mentions):
 			member = message.mentions[0]
-		elif command == '!viewpool':
+
+		if not message.guild:
+			if message.author.bot:
+				return
+			await self.on_dm(message, command)
+			return
+
+		if message.channel.name != 'bot-lab':
+			return
+
+		if command == '!challenge':
+			await self.issue_challenge(message)
+
+		if command == '!viewpool':
 			# Support viewing the pool of a user by referencing their name instead of mentioning them
 			member = self.guilds[0].get_member_named(argument)
 			if member == None:
@@ -181,6 +197,58 @@ class PoolBot(discord.Client):
                 f"search for pools and packs. Takes in a date in the form YYYY-MM-DD\n"
                 f"> `!help`: shows this message\n"
 			)
+
+	async def issue_challenge(self, message):
+		if not self.pending_lfm_user_mention:
+			await self.bot_lab.send(
+				"Sorry, but no one is looking for a match right now. You can send out an anonymous LFM by DMing me `!lfm`."
+			)
+			return
+		
+		await self.bot_lab.send(
+			f"{self.pending_lfm_user_mention}, your anonymous LFM has been accepted by {message.author.mention}.")
+
+		await update_message(self.active_lfm_message, f'A match was found between {self.pending_lfm_user_mention} and {message.author.mention}.')
+		
+		self.pending_lfm_user_mention = None;
+		self.active_lfm_message = None;
+
+	async def on_dm(self, message, command):
+		if (command == '!lfm'):
+			if (self.pending_lfm_user_mention):
+				await message.author.send(
+					"Someone is already looking for a match. You can play them by posting !challenge in the looking-for-matches channel of the league discord."
+				)
+				return
+			self.active_lfm_message = await self.bot_lab.send(
+				"An anonymous player is looking for a match. Post !challenge to reveal their identity and initiate a match."
+			)
+			await message.author.send(
+				f"I've created a post for you. You'll receive a mention when an opponent is found.\n"
+				f"If you want to cancel this, send me a message with the text `!retractLfm`."
+				)
+			self.pending_lfm_user_mention = message.author.mention
+			return
+
+		if (command == '!retractlfm'):
+			if (message.author.mention == self.pending_lfm_user_mention):
+				await self.active_lfm_message.delete()
+				self.active_lfm_message = None
+				await message.author.send(
+					"Understood. The post made on your behalf has been deleted."
+					)
+				self.pending_lfm_user_mention = None
+			else:
+				await message.author.send(
+					"You don't currently have an outgoing LFM."
+					)
+			return
+
+		await message.author.send(
+			f"I'm sorry, but I didn't understand that. Please send one of the following commands:\n"
+			f"> `!lfm`: creates an anonymous post looking for a match.\n"
+			f"> `!retractLfm`: removes an anonymous LFM that you've sent out."
+		)
 
 	async def find_pool(self, user_id):
 		async for message in self.pool_channel.history(limit = 1000, after = self.league_start).filter(lambda message : message.author.name == 'Booster Tutor'):
