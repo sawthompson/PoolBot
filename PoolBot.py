@@ -53,6 +53,7 @@ class PoolBot(discord.Client):
 		print(f'{self.user} has connected to Discord!')
 		self.pool_channel = None
 		self.packs_channel = None
+		self.lfm_channel = None
 		self.pending_lfm_user_mention = None
 		self.active_lfm_message = None
 		# Safe to assume that there's only one guild, because this is a very specific bot.
@@ -61,14 +62,14 @@ class PoolBot(discord.Client):
 				self.pool_channel = channel
 			if (channel.name == 'pack-generation'):
 				self.packs_channel = channel
-			if (channel.name == 'bot-lab'):
-				self.bot_lab = channel
+			if (channel.name == 'looking-for-matches'):
+				self.lfm_channel = channel
 		if self.pool_channel == None:
 			print('Could not find starting-pools channel')
 		if self.packs_channel == None:
 			print('Could not find pack-generation channel')
-		if self.packs_channel == None:
-			print('Could not find bot-lab channel')
+		if self.lfm_channel == None:
+			print('Could not find looking-for-matches channel')
 
 	async def on_message(self, message):
 		# Remove the prefix '!' and split the string on spaces
@@ -89,7 +90,7 @@ class PoolBot(discord.Client):
 			await self.on_dm(message, command)
 			return
 
-		if message.channel.name != 'bot-lab':
+		if message.channel.name != 'looking-for-matches':
 			return
 
 		if command == '!challenge':
@@ -200,12 +201,12 @@ class PoolBot(discord.Client):
 
 	async def issue_challenge(self, message):
 		if not self.pending_lfm_user_mention:
-			await self.bot_lab.send(
+			await self.lfm_channel.send(
 				"Sorry, but no one is looking for a match right now. You can send out an anonymous LFM by DMing me `!lfm`."
 			)
 			return
 		
-		await self.bot_lab.send(
+		await self.lfm_channel.send(
 			f"{self.pending_lfm_user_mention}, your anonymous LFM has been accepted by {message.author.mention}.")
 
 		await update_message(self.active_lfm_message, f'A match was found between {self.pending_lfm_user_mention} and {message.author.mention}.')
@@ -220,7 +221,7 @@ class PoolBot(discord.Client):
 					"Someone is already looking for a match. You can play them by posting !challenge in the looking-for-matches channel of the league discord."
 				)
 				return
-			self.active_lfm_message = await self.bot_lab.send(
+			self.active_lfm_message = await self.lfm_channel.send(
 				"An anonymous player is looking for a match. Post !challenge to reveal their identity and initiate a match."
 			)
 			await message.author.send(
