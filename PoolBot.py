@@ -51,6 +51,7 @@ class PoolBot(discord.Client):
 
 	async def on_ready(self):
 		print(f'{self.user} has connected to Discord!')
+		await self.user.edit(username='AGL Bot')
 		self.pool_channel = None
 		self.packs_channel = None
 		self.lfm_channel = None
@@ -73,9 +74,10 @@ class PoolBot(discord.Client):
 
 	async def on_message(self, message):
 		# Remove the prefix '!' and split the string on spaces
-		argv = message.content.split()
+		argv = message.content.split(None, 1)
 		assert len(argv)
 		command = argv[0].lower()
+		argument = ''
 		if '"' in message.content:
 			# Support arguments passed in quotes
 			argument = message.content.split('"')[1]
@@ -87,10 +89,10 @@ class PoolBot(discord.Client):
 		if not message.guild:
 			if message.author.bot:
 				return
-			await self.on_dm(message, command)
+			await self.on_dm(message, command, argument)
 			return
 
-		if message.channel.name != 'looking-for-matches':
+		if message.channel != self.lfm_channel:
 			return
 
 		if command == '!challenge':
@@ -209,21 +211,32 @@ class PoolBot(discord.Client):
 		await self.lfm_channel.send(
 			f"{self.pending_lfm_user_mention}, your anonymous LFM has been accepted by {message.author.mention}.")
 
-		await update_message(self.active_lfm_message, f'A match was found between {self.pending_lfm_user_mention} and {message.author.mention}.')
+		await update_message(
+			self.active_lfm_message,
+			f'~~{self.active_lfm_message.content}~~\n'
+			f'A match was found between {self.pending_lfm_user_mention} and {message.author.mention}.'
+			)
 		
 		self.pending_lfm_user_mention = None;
 		self.active_lfm_message = None;
 
-	async def on_dm(self, message, command):
+	async def on_dm(self, message, command, argument):
 		if (command == '!lfm'):
 			if (self.pending_lfm_user_mention):
 				await message.author.send(
 					"Someone is already looking for a match. You can play them by posting !challenge in the looking-for-matches channel of the league discord."
 				)
 				return
-			self.active_lfm_message = await self.lfm_channel.send(
-				"An anonymous player is looking for a match. Post !challenge to reveal their identity and initiate a match."
-			)
+			if (not argument):
+				self.active_lfm_message = await self.lfm_channel.send(
+					"An anonymous player is looking for a match. Post `!challenge` to reveal their identity and initiate a match."
+				)
+			else:
+				self.active_lfm_message = await self.lfm_channel.send(
+					f"An anonymous player is looking for a match. Post `!challenge` to reveal their identity and initiate a match.\n"
+					f"Message from the player:\n"
+					f"> {argument}"
+				)
 			await message.author.send(
 				f"I've created a post for you. You'll receive a mention when an opponent is found.\n"
 				f"If you want to cancel this, send me a message with the text `!retractLfm`."
