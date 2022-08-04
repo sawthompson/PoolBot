@@ -95,6 +95,11 @@ class PoolBot(discord.Client):
 
 		if command == '!playerchoice':
 			await self.prompt_user_pick(message)
+			return
+
+		if command == '!addpack' and message.reference:
+			await self.add_pack(message, argument)
+			return
 
 		if message.channel == self.lfm_channel and command == '!challenge' and not self.dev_mode:
 				await self.issue_challenge(message)
@@ -192,14 +197,14 @@ class PoolBot(discord.Client):
 		elif command == '!help':
 			await message.channel.send(
 				f"You can give me one of the following commands:\n"
-                f"> `!viewpool {{user}}`: finds and displays the pool, including "
-                f"punishment packs, for a given user. Can reference a user either "
-                f"through an @mention or by their discord name (displayed on their "
-                f"below their nickname, e.g. 'sawyer#8108'. For users with spaces in "
-                f"their names, use quotes, e.g. `!viewpool \"Soy Boy#1234\"`\n"
-                f"> `!setLeagueStartTime`: updates the league start time used to "
-                f"search for pools and packs. Takes in a date in the form YYYY-MM-DD\n"
-                f"> `!help`: shows this message\n"
+				f"> `!viewpool {{user}}`: finds and displays the pool, including "
+				f"punishment packs, for a given user. Can reference a user either "
+				f"through an @mention or by their discord name (displayed on their "
+				f"below their nickname, e.g. 'sawyer#8108'. For users with spaces in "
+				f"their names, use quotes, e.g. `!viewpool \"Soy Boy#1234\"`\n"
+				f"> `!setLeagueStartTime`: updates the league start time used to "
+				f"search for pools and packs. Takes in a date in the form YYYY-MM-DD\n"
+				f"> `!help`: shows this message\n"
 			)
 
 	async def prompt_user_pick(self, message):
@@ -355,6 +360,53 @@ class PoolBot(discord.Client):
 			f"> `!choosePackA`: responds to a pending pack selection option."			
 			f"> `!choosePackB`: responds to a pending pack selection option."
 		)
+
+	async def add_pack(self, message, argument):
+		if message.channel != self.packs_channel:
+			return
+
+		ref = await message.channel.fetch_message(
+					message.reference.message_id
+				)
+		if ref.author == self.booster_tutor:
+			return
+		if ref.author != self.user:
+			await message.channel.send(
+				f"{message.author.mention}\n"
+				"The message you are replying to does not contain packs I have generated"
+				)
+
+		pack_content = ref.content.split("```")[1].strip()
+		sealeddeck_id = argument.strip()
+		pack_json = arena_to_json(pack_content)
+		m = await message.channel.send(
+			f"{message.author.mention}\n"
+			f":hourglass: Adding pack to pool..."
+		)
+		try:
+			new_id = await pool_to_sealeddeck(
+				pack_json, sealeddeck_id
+			)
+		except aiohttp.ClientResponseError as e:
+			print(f"Sealeddeck error: {e}")
+			content = (
+				f"{message.author.mention}\n"
+				f"The packs could not be added to sealeddeck.tech "
+				f"pool with ID `{sealeddeck_id}`. Please, verify "
+				f"the ID.\n"
+				f"If the ID is correct, sealeddeck.tech might be "
+				f"having some issues right now, try again later."
+			)
+
+		else:
+			content = (
+				f"{message.author.mention}\n"
+				f"The packs have been added to the pool.\n\n"
+				f"**Updated sealeddeck.tech pool**\n"
+				f"link: https://sealeddeck.tech/{new_id}\n"
+				f"ID: `{new_id}`"
+			)
+		await m.edit(content=content)
 
 	async def find_pool(self, user_id):
 		async for message in self.pool_channel.history(limit = 1000, after = self.league_start).filter(lambda message : message.author.name == 'Booster Tutor'):
