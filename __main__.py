@@ -8,8 +8,7 @@ def main():
 	parser = argparse.ArgumentParser(
 		prog="poolbot",
 		description=(
-			"A Discord bot to combine generated pools and packs in the Arena "
-			"Sealed League."
+			"A Discord bot to help out with the Arena Gauntlet League."
 		),
 	)
 	parser.add_argument(

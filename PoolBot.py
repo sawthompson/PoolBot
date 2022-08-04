@@ -3,6 +3,7 @@ import os
 
 import discord
 import re
+import time
 from dotenv import load_dotenv
 from typing import Optional, Sequence, Union
 from datetime import datetime
@@ -45,35 +46,35 @@ async def update_message(message, new_content):
 class PoolBot(discord.Client):
 	def __init__(self, config: utils.Config, intents: discord.Intents, *args, **kwargs):
 		self.config = config
-		# TODO(sawyer): Allow this to be set with a command by Arena Sealed League admins
-		self.league_start = datetime.fromisoformat('2022-01-04')
+		self.league_start = datetime.fromisoformat('2022-06-22')
 		super().__init__(intents=intents, *args, **kwargs)
 
 	async def on_ready(self):
 		print(f'{self.user} has connected to Discord!')
 		await self.user.edit(username='AGL Bot')
-		self.pool_channel = None
-		self.packs_channel = None
-		self.lfm_channel = None
+		# If this is true, posts will be limited to #bot-lab and #bot-bunker, and LFM DMs will be ignored.
+		self.dev_mode = False
+		self.pool_channel = self.get_channel(719933932690472970)
+		self.packs_channel = self.get_channel(795671231457263687) # bot lab for now
+		self.lfm_channel = self.get_channel(720338190300348559)
+		self.bot_bunker_channel = self.get_channel(1000465465572864141)
+		self.league_committee_channel = self.get_channel(756195275743166655)
 		self.pending_lfm_user_mention = None
 		self.active_lfm_message = None
-		# Safe to assume that there's only one guild, because this is a very specific bot.
-		for channel in self.guilds[0].channels:
-			if (channel.name == 'starting-pools'):
-				self.pool_channel = channel
-			if (channel.name == 'pack-generation'):
-				self.packs_channel = channel
-			if (channel.name == 'looking-for-matches'):
-				self.lfm_channel = channel
-		if self.pool_channel == None:
-			print('Could not find starting-pools channel')
-		if self.packs_channel == None:
-			print('Could not find pack-generation channel')
-		if self.lfm_channel == None:
-			print('Could not find looking-for-matches channel')
+		self.num_boosters_awaiting = 0
+		self.awaiting_boosters_for_user = None
+		for user in self.users:
+			if (user.name == 'Booster Tutor'):
+				self.booster_tutor = user
 
 	async def on_message(self, message):
-		# Remove the prefix '!' and split the string on spaces
+		# As part of the !playerchoice flow, repost Booster Tutor packs in pack-generation with instructions for
+		# the appropriate user to select their pack.
+		if message.channel == self.bot_bunker_channel and message.author == self.booster_tutor and message.mentions[0] == self.user:
+			await self.handle_booster_tutor_response(message)
+			return
+
+		# Split the string on the first space
 		argv = message.content.split(None, 1)
 		assert len(argv)
 		command = argv[0].lower()
@@ -87,16 +88,16 @@ class PoolBot(discord.Client):
 			member = message.mentions[0]
 
 		if not message.guild:
-			if message.author.bot:
+			if message.author == self.user:
 				return
 			await self.on_dm(message, command, argument)
 			return
 
-		if message.channel != self.lfm_channel:
-			return
+		if command == '!playerchoice':
+			await self.prompt_user_pick(message)
 
-		if command == '!challenge':
-			await self.issue_challenge(message)
+		if message.channel == self.lfm_channel and command == '!challenge' and not self.dev_mode:
+				await self.issue_challenge(message)
 
 		if command == '!viewpool':
 			# Support viewing the pool of a user by referencing their name instead of mentioning them
@@ -201,6 +202,48 @@ class PoolBot(discord.Client):
                 f"> `!help`: shows this message\n"
 			)
 
+	async def prompt_user_pick(self, message):
+		# Ensure the user doesn't already have a pending pick to make
+		pendingPickMessage = await self.packs_channel.history().find(
+			lambda m : m.author.name == 'AGL Bot'
+			and m.mentions
+			and m.mentions[0] == message.mentions[0]
+			and f'Pack Option' in m.content
+			)
+		if (pendingPickMessage):
+			await self.packs_channel.send(
+				f'{message.mentions[0].mention} You still have a pending pack selection to make! Please select your '
+				f'previous pack, and then post in #league-committee so someone can can manually generate your new packs.'
+			)
+			return
+
+		# Messages from Booster Tutor aren't tied to a user, so only one pair can be resolved at a time.
+		while (self.awaiting_boosters_for_user != None):
+			time.sleep(3)
+
+		booster_type = message.content.split(None)[1]
+		self.num_boosters_awaiting = 2
+		self.awaiting_boosters_for_user = message.mentions[0]
+
+		# Generate two packs of the specified type
+		await self.bot_bunker_channel.send(booster_type)
+		await self.bot_bunker_channel.send(booster_type)
+
+	async def handle_booster_tutor_response(self, message):
+		assert self.num_boosters_awaiting > 0
+		if self.num_boosters_awaiting == 2:
+			self.num_boosters_awaiting -= 1
+			await self.packs_channel.send(
+				f'Pack Option A for {self.awaiting_boosters_for_user.mention}. To select this pack, DM me `!choosePackA`\n'
+				f'```{message.content.split("```")[1].strip()}```')
+		else:
+			self.num_boosters_awaiting -= 1
+			await self.packs_channel.send(
+				f'Pack Option B for {self.awaiting_boosters_for_user.mention}. To select this pack, DM me `!choosePackB`\n'
+				f'```{message.content.split("```")[1].strip()}```')
+		if self.num_boosters_awaiting == 0:
+			self.awaiting_boosters_for_user = None
+
 	async def issue_challenge(self, message):
 		if not self.pending_lfm_user_mention:
 			await self.lfm_channel.send(
@@ -220,7 +263,54 @@ class PoolBot(discord.Client):
 		self.pending_lfm_user_mention = None;
 		self.active_lfm_message = None;
 
+	async def choosePack(self, user, chosenOption):
+		if (chosenOption == 'A'):
+			notChosenOption = 'B'
+		else:
+			notChosenOption = 'A'
+		chosenMessage = await self.packs_channel.history().find(
+			lambda message : message.author.name == 'AGL Bot'
+			and message.mentions
+			and message.mentions[0] == user
+			and f'Pack Option {chosenOption}' in message.content
+			)
+
+		notChosenMessage = await self.packs_channel.history().find(
+			lambda message : message.author.name == 'AGL Bot'
+			and message.mentions
+			and message.mentions[0] == user
+			and f'Pack Option {notChosenOption}' in message.content
+			)
+
+		if not chosenMessage or not notChosenMessage:
+			await user.send(
+				f"Sorry, but I couldn't find any pending packs for you. Please post in "
+				f"{self.league_committee_channel.mention} if you think this is an error.")
+			return
+
+		await update_message(chosenMessage,
+			f'Pack chosen by {user.mention}.'
+			f'{chosenMessage.content.split(f"!choosePack{chosenOption}`")[1]}')
+
+		await update_message(notChosenMessage, 
+			f'Pack not chosen by {user.mention}.'
+			f'~~{notChosenMessage.content.split(f"!choosePack{notChosenOption}`")[1]}~~')
+
+		await user.send("Understood. Your selection has been noted.")
+		return
+
 	async def on_dm(self, message, command, argument):
+		if command == '!choosepacka':
+			await self.choosePack(message.author, 'A')
+			return
+
+		if command == '!choosepackb':
+			await self.choosePack(message.author, 'B')
+			return
+
+		if (self.dev_mode):
+			return
+
 		if (command == '!lfm'):
 			if (self.pending_lfm_user_mention):
 				await message.author.send(
@@ -262,6 +352,8 @@ class PoolBot(discord.Client):
 			f"I'm sorry, but I didn't understand that. Please send one of the following commands:\n"
 			f"> `!lfm`: creates an anonymous post looking for a match.\n"
 			f"> `!retractLfm`: removes an anonymous LFM that you've sent out."
+			f"> `!choosePackA`: responds to a pending pack selection option."			
+			f"> `!choosePackB`: responds to a pending pack selection option."
 		)
 
 	async def find_pool(self, user_id):
