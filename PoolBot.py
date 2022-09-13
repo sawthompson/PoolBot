@@ -53,7 +53,7 @@ class PoolBot(discord.Client):
 		print(f'{self.user} has connected to Discord!')
 		await self.user.edit(username='AGL Bot')
 		# If this is true, posts will be limited to #bot-lab and #bot-bunker, and LFM DMs will be ignored.
-		self.dev_mode = True
+		self.dev_mode = False
 		self.pool_channel = self.get_channel(719933932690472970)
 		self.packs_channel = self.get_channel(795671231457263687) # bot lab for now
 		self.lfm_channel = self.get_channel(720338190300348559)
