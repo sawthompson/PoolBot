@@ -53,11 +53,11 @@ class PoolBot(discord.Client):
 		print(f'{self.user} has connected to Discord!')
 		await self.user.edit(username='AGL Bot')
 		# If this is true, posts will be limited to #bot-lab and #bot-bunker, and LFM DMs will be ignored.
-		self.dev_mode = False
+		self.dev_mode = True
 		self.pool_channel = self.get_channel(719933932690472970)
 		self.packs_channel = self.get_channel(795671231457263687) # bot lab for now
 		self.lfm_channel = self.get_channel(720338190300348559)
-		self.bot_bunker_channel = self.get_channel(1000465465572864141)
+		self.bot_bunker_channel = self.get_channel(714554601445130331)
 		self.league_committee_channel = self.get_channel(756195275743166655)
 		self.pending_lfm_user_mention = None
 		self.active_lfm_message = None
@@ -305,6 +305,9 @@ class PoolBot(discord.Client):
 		return
 
 	async def on_dm(self, message, command, argument):
+		if (self.dev_mode):
+			return
+
 		if command == '!choosepacka':
 			await self.choosePack(message.author, 'A')
 			return
@@ -313,8 +316,6 @@ class PoolBot(discord.Client):
 			await self.choosePack(message.author, 'B')
 			return
 
-		if (self.dev_mode):
-			return
 
 		if (command == '!lfm'):
 			if (self.pending_lfm_user_mention):
@@ -429,3 +430,27 @@ class PoolBot(discord.Client):
 					pack_content = message.content.split("```")[1].strip()
 					packs.append(pack_content)
 		return packs
+
+	async def message_member(self, member):
+		try:
+			await member.send(
+	'Greetings, and welcome to the DOMINARIA UNITED edition of the Arena Gauntlet League! I’m Chris Y, your tournament organizer. The league ruleset is handily stored in the ‘Rules’ thread of our Discord (please do read it), but here’s the TLDR: you’ll make a 60-card sealed deck from 6 DMU packs, play an average of 5 matches a week against different players, and add 1 additional Standard-legal pack to your pool after each loss.   After a few weeks of playing matches, you will either get eliminated after your 11th loss—or make the Top 8 and prize out big! Anyone who places in the Top 50% wins at least a portion their entry fee back; and store credit prizes can be applied to entries to subsequent leagues (i.e., ‘going infinite’).  Players’ sealed pools for this tournament will be generated shortly after the close of Registration (5pm EST Wednesday, September 7th), and then ranked play will begin on 5pm EST Friday, September 9th. \n\nThe prize support is excellent! $10 x total # of players of support in store credit coms from our partner stores Three Kings Loot and Magic Stronghold Games (typically over $1000 total).  To complete your registration please fill out the form below, click ‘Submit’, then follow the link to pay the $10 registration fee to one of our partners, EITHER Magic Stronghold Games OR Three Kings Loot (don’t pay the shipping fee—set your delivery address to the store’s Montreal location to avoid this): https://forms.gle/3FwJuCxSZb7QzgCbA If you have any questions or need advice, feel free to ask me or others on the League Committee. I look forward to playing you soon!\n\nNote: Replies to this message won`t be read. Please DM Chris Y instead. Full league rules can be found here: https://discord.com/channels/714554601445130331/718289801429909706'
+				)
+			time.sleep(1)
+		except discord.errors.Forbidden as e:
+				print(e)
+
+	async def get_members_not_in_league(self, league_name):
+		for member in self.guilds[0].members:
+			if member.display_name in 'Test User Please Ignore':
+				print('trying to DM: ' + member.display_name)
+			# if 'Sawyer T' in member.display_name:
+				await self.message_member(member)
+				print('DMed ' + member.display_name)
+			# found = False
+			# for role in member.roles:
+			# 	if league_name in role.name:
+			# 		found = True
+			# if not found:
+			# 	print(member.display_name)
+
