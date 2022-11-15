@@ -57,15 +57,19 @@ class PoolBot(discord.Client):
 		self.pool_channel = self.get_channel(719933932690472970)
 		self.packs_channel = self.get_channel(795671231457263687) # bot lab for now
 		self.lfm_channel = self.get_channel(720338190300348559)
-		self.bot_bunker_channel = self.get_channel(714554601445130331)
+		self.bot_bunker_channel = self.get_channel(1000465465572864141)
 		self.league_committee_channel = self.get_channel(756195275743166655)
 		self.pending_lfm_user_mention = None
 		self.active_lfm_message = None
 		self.num_boosters_awaiting = 0
+		self.booster_on_hold = None
 		self.awaiting_boosters_for_user = None
 		for user in self.users:
 			if (user.name == 'Booster Tutor'):
 				self.booster_tutor = user
+
+		# Code used for semi-manual mass-messaging
+		# await self.get_members_not_in_league("Brothers' War")
 
 	async def on_message(self, message):
 		# As part of the !playerchoice flow, repost Booster Tutor packs in pack-generation with instructions for
@@ -208,20 +212,6 @@ class PoolBot(discord.Client):
 			)
 
 	async def prompt_user_pick(self, message):
-		# Ensure the user doesn't already have a pending pick to make
-		pendingPickMessage = await self.packs_channel.history().find(
-			lambda m : m.author.name == 'AGL Bot'
-			and m.mentions
-			and m.mentions[0] == message.mentions[0]
-			and f'Pack Option' in m.content
-			)
-		if (pendingPickMessage):
-			await self.packs_channel.send(
-				f'{message.mentions[0].mention} You still have a pending pack selection to make! Please select your '
-				f'previous pack, and then post in #league-committee so someone can can manually generate your new packs.'
-			)
-			return
-
 		# Messages from Booster Tutor aren't tied to a user, so only one pair can be resolved at a time.
 		while (self.awaiting_boosters_for_user != None):
 			time.sleep(3)
@@ -238,16 +228,22 @@ class PoolBot(discord.Client):
 		assert self.num_boosters_awaiting > 0
 		if self.num_boosters_awaiting == 2:
 			self.num_boosters_awaiting -= 1
-			await self.packs_channel.send(
-				f'Pack Option A for {self.awaiting_boosters_for_user.mention}. To select this pack, DM me `!choosePackA`\n'
-				f'```{message.content.split("```")[1].strip()}```')
+			self.booster_on_hold = message.content.split("```")[1].strip()
 		else:
-			self.num_boosters_awaiting -= 1
+			view = discord.ui.View()
+			pack_one_button = discord.ui.Button(style=discord.ButtonStyle.primary, label="Select Pack 1")
+			pack_two_button = discord.ui.Button(style=discord.ButtonStyle.primary, label="Select Pack 2")
+			pack_one_button.callback = self.create_callback(0, self.awaiting_boosters_for_user.id)
+			pack_two_button.callback = self.create_callback(1, self.awaiting_boosters_for_user.id)
+			view.add_item(pack_one_button)
+			view.add_item(pack_two_button)
 			await self.packs_channel.send(
-				f'Pack Option B for {self.awaiting_boosters_for_user.mention}. To select this pack, DM me `!choosePackB`\n'
-				f'```{message.content.split("```")[1].strip()}```')
-		if self.num_boosters_awaiting == 0:
+				f'Generated a pair of packs for {self.awaiting_boosters_for_user.mention}. Make a selection with the buttons below.\n'
+				f'```Pack 1:\n-----\n{message.content.split("```")[1].strip()}\n-----\nPack 2:\n-----\n{self.booster_on_hold}\n-----\n```',
+				view=view)
+			self.num_boosters_awaiting = 0
 			self.awaiting_boosters_for_user = None
+			self.booster_on_hold = None
 
 	async def issue_challenge(self, message):
 		if not self.pending_lfm_user_mention:
@@ -268,54 +264,22 @@ class PoolBot(discord.Client):
 		self.pending_lfm_user_mention = None;
 		self.active_lfm_message = None;
 
-	async def choosePack(self, user, chosenOption):
-		if (chosenOption == 'A'):
-			notChosenOption = 'B'
-		else:
-			notChosenOption = 'A'
-		chosenMessage = await self.packs_channel.history().find(
-			lambda message : message.author.name == 'AGL Bot'
-			and message.mentions
-			and message.mentions[0] == user
-			and f'Pack Option {chosenOption}' in message.content
-			)
-
-		notChosenMessage = await self.packs_channel.history().find(
-			lambda message : message.author.name == 'AGL Bot'
-			and message.mentions
-			and message.mentions[0] == user
-			and f'Pack Option {notChosenOption}' in message.content
-			)
-
-		if not chosenMessage or not notChosenMessage:
-			await user.send(
-				f"Sorry, but I couldn't find any pending packs for you. Please post in "
-				f"{self.league_committee_channel.mention} if you think this is an error.")
-			return
-
-		await update_message(chosenMessage,
-			f'Pack chosen by {user.mention}.'
-			f'{chosenMessage.content.split(f"!choosePack{chosenOption}`")[1]}')
-
-		await update_message(notChosenMessage, 
-			f'Pack not chosen by {user.mention}.'
-			f'~~{notChosenMessage.content.split(f"!choosePack{notChosenOption}`")[1]}~~')
-
-		await user.send("Understood. Your selection has been noted.")
-		return
+	def create_callback(self, buttonIndex, user_id):
+		async def callback(interaction: discord.Interaction):
+			if (user_id != interaction.user.id):
+				return
+			parts = interaction.message.content.split(f"-----")
+			chosen_pack = f"```Chosen Pack:{parts[buttonIndex * 2 + 1]}```"
+			unchosen_pack = f"~~```Other Pack:{parts[abs(1-buttonIndex) * 2 + 1]}```~~"
+			await interaction.response.edit_message(
+				content=f"Pack selection made by {interaction.message.mentions[0].mention}\n{chosen_pack}\n{unchosen_pack}",
+				view=None,
+				embed=None)
+		return callback
 
 	async def on_dm(self, message, command, argument):
 		if (self.dev_mode):
 			return
-
-		if command == '!choosepacka':
-			await self.choosePack(message.author, 'A')
-			return
-
-		if command == '!choosepackb':
-			await self.choosePack(message.author, 'B')
-			return
-
 
 		if (command == '!lfm'):
 			if (self.pending_lfm_user_mention):
@@ -377,7 +341,7 @@ class PoolBot(discord.Client):
 				"The message you are replying to does not contain packs I have generated"
 				)
 
-		pack_content = ref.content.split("```")[1].strip()
+		pack_content = ref.content.split("```")[1].split("\n", 1)[1].strip()
 		sealeddeck_id = argument.strip()
 		pack_json = arena_to_json(pack_content)
 		m = await message.channel.send(
@@ -434,7 +398,7 @@ class PoolBot(discord.Client):
 	async def message_member(self, member):
 		try:
 			await member.send(
-	'Greetings, and welcome to the DOMINARIA UNITED edition of the Arena Gauntlet League! I’m Chris Y, your tournament organizer. The league ruleset is handily stored in the ‘Rules’ thread of our Discord (please do read it), but here’s the TLDR: you’ll make a 60-card sealed deck from 6 DMU packs, play an average of 5 matches a week against different players, and add 1 additional Standard-legal pack to your pool after each loss.   After a few weeks of playing matches, you will either get eliminated after your 11th loss—or make the Top 8 and prize out big! Anyone who places in the Top 50% wins at least a portion their entry fee back; and store credit prizes can be applied to entries to subsequent leagues (i.e., ‘going infinite’).  Players’ sealed pools for this tournament will be generated shortly after the close of Registration (5pm EST Wednesday, September 7th), and then ranked play will begin on 5pm EST Friday, September 9th. \n\nThe prize support is excellent! $10 x total # of players of support in store credit coms from our partner stores Three Kings Loot and Magic Stronghold Games (typically over $1000 total).  To complete your registration please fill out the form below, click ‘Submit’, then follow the link to pay the $10 registration fee to one of our partners, EITHER Magic Stronghold Games OR Three Kings Loot (don’t pay the shipping fee—set your delivery address to the store’s Montreal location to avoid this): https://forms.gle/3FwJuCxSZb7QzgCbA If you have any questions or need advice, feel free to ask me or others on the League Committee. I look forward to playing you soon!\n\nNote: Replies to this message won`t be read. Please DM Chris Y instead. Full league rules can be found here: https://discord.com/channels/714554601445130331/718289801429909706'
+	"Greetings, current or former Arena Gauntlet League player! We\'re happy to announce that we're back for our Brothers' War edition of the league.\n\nThis time, we have a special new mechanic, where for each punishment pack you would open, instead you open 2 packs (1 BRO pack and 1 random historic pack) and then pick the pack that fits your deck better.\n\nSign up here: https://forms.gle/CormGGhMzoTuBqYu9. Registration closes Wednesday November 16th.\n\nWe hope to see you there!"
 				)
 			time.sleep(1)
 		except discord.errors.Forbidden as e:
@@ -442,7 +406,7 @@ class PoolBot(discord.Client):
 
 	async def get_members_not_in_league(self, league_name):
 		for member in self.guilds[0].members:
-			if member.display_name in 'Test User Please Ignore':
+			if member.display_name in "":
 				print('trying to DM: ' + member.display_name)
 			# if 'Sawyer T' in member.display_name:
 				await self.message_member(member)

@@ -18,7 +18,7 @@ def main():
 	)
 	args = parser.parse_args()
 	config = get_config(Path(args.config))
-	intents = discord.Intents.default()
+	intents = discord.Intents.all()
 	intents.members = True
 	bot = PoolBot(config, intents)
 	bot.run(config.discord_token)
