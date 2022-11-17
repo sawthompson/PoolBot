@@ -107,7 +107,7 @@ class PoolBot(discord.Client):
 			await self.on_dm(message, command, argument)
 			return
 
-		if command == '!playerchoice':
+		if command == '!playerchoice' and message.channel == self.packs_channel:
 			await self.prompt_user_pick(message)
 			return
 
