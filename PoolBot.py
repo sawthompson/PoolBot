@@ -226,7 +226,7 @@ class PoolBot(discord.Client):
 		while (self.awaiting_boosters_for_user != None):
 			time.sleep(3)
 
-		booster__one_type = message.content.split(None)[1]
+		booster_one_type = message.content.split(None)[1]
 		booster_two_type = message.content.split(None)[2]
 		self.num_boosters_awaiting = 2
 		self.awaiting_boosters_for_user = message.mentions[0]
