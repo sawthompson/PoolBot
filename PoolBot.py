@@ -1,3 +1,4 @@
+from __future__ import print_function
 # bot.py
 import os
 
@@ -7,6 +8,14 @@ import time
 from dotenv import load_dotenv
 from typing import Optional, Sequence, Union
 from datetime import datetime
+
+import os.path
+
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import InstalledAppFlow
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 
 import aiohttp
 import utils
@@ -64,6 +73,7 @@ class PoolBot(discord.Client):
 		self.num_boosters_awaiting = 0
 		self.booster_on_hold = None
 		self.awaiting_boosters_for_user = None
+		self.spreadsheet_id = '1RLvLz_yFV20eseCxdI9ZmLXDKcHWTG2-EuRcdesMD_o'
 		for user in self.users:
 			if (user.name == 'Booster Tutor'):
 				self.booster_tutor = user
@@ -233,8 +243,8 @@ class PoolBot(discord.Client):
 			view = discord.ui.View()
 			pack_one_button = discord.ui.Button(style=discord.ButtonStyle.primary, label="Select Pack 1")
 			pack_two_button = discord.ui.Button(style=discord.ButtonStyle.primary, label="Select Pack 2")
-			pack_one_button.callback = self.create_callback(0, self.awaiting_boosters_for_user.id)
-			pack_two_button.callback = self.create_callback(1, self.awaiting_boosters_for_user.id)
+			pack_one_button.callback = self.create_callback(0, self.awaiting_boosters_for_user)
+			pack_two_button.callback = self.create_callback(1, self.awaiting_boosters_for_user)
 			view.add_item(pack_one_button)
 			view.add_item(pack_two_button)
 			await self.packs_channel.send(
@@ -264,9 +274,9 @@ class PoolBot(discord.Client):
 		self.pending_lfm_user_mention = None;
 		self.active_lfm_message = None;
 
-	def create_callback(self, buttonIndex, user_id):
+	def create_callback(self, buttonIndex, user):
 		async def callback(interaction: discord.Interaction):
-			if (user_id != interaction.user.id):
+			if (user.id != interaction.user.id):
 				return
 			parts = interaction.message.content.split(f"-----")
 			chosen_pack = f"```Chosen Pack:{parts[buttonIndex * 2 + 1]}```"
@@ -275,6 +285,9 @@ class PoolBot(discord.Client):
 				content=f"Pack selection made by {interaction.message.mentions[0].mention}\n{chosen_pack}\n{unchosen_pack}",
 				view=None,
 				embed=None)
+			result = await self.update_pool(user, parts[buttonIndex * 2 + 1], interaction.message)
+			if not result:
+				await update_message(interaction.message, interaction.message.content + "\n" + f"Unable to update pool. Please message Russell S")
 		return callback
 
 	async def on_dm(self, message, command, argument):
@@ -417,4 +430,68 @@ class PoolBot(discord.Client):
 			# 		found = True
 			# if not found:
 			# 	print(member.display_name)
+
+	async def update_pool(self, user, pack_content, message):
+		"""Shows basic usage of the Sheets API.
+		Prints values from a sample spreadsheet.
+		"""
+		creds = None
+		# The file token.json stores the user's access and refresh tokens, and is
+		# created automatically when the authorization flow completes for the first
+		# time.
+		if os.path.exists('token.json'):
+			creds = Credentials.from_authorized_user_file('token.json',
+				['https://www.googleapis.com/auth/spreadsheets'])
+		# If there are no (valid) credentials available, let the user log in.
+		if not creds or not creds.valid:
+			if creds and creds.expired and creds.refresh_token:
+				creds.refresh(Request())
+			else:
+				flow = InstalledAppFlow.from_client_secrets_file(
+					'credentials.json', ['https://www.googleapis.com/auth/spreadsheets'])
+				creds = flow.run_local_server(port=0)
+			# Save the credentials for the next run
+			with open('token.json', 'w') as token:
+				token.write(creds.to_json())
+
+		try:
+			service = build('sheets', 'v4', credentials=creds)
+
+			# Call the Sheets API
+			sheet = service.spreadsheets()
+			result = sheet.values().get(spreadsheetId=self.spreadsheet_id,
+										range='Pools!A7:E120').execute()
+			values = result.get('values', [])
+
+			if not values:
+				print('No data found.')
+				return
+
+			currRow = 7
+			for row in values:
+				if row[1] in user.display_name:
+					sealeddeck_id = row[4].split("sealeddeck.tech/")[1]
+					pack_json = arena_to_json(pack_content.split("\n", 1)[1])
+					try:
+						new_id = await pool_to_sealeddeck(
+							pack_json, sealeddeck_id
+						)
+					except aiohttp.ClientResponseError as e:
+						print(f"Sealeddeck error: {e}")
+					else:
+						body = {
+							'values': [
+								[f"https://sealeddeck.tech/{new_id}"],
+							],
+						}
+						sheet.values().update(spreadsheetId=self.spreadsheet_id,
+							range=f'Pools!E{currRow}:E{currRow}', valueInputOption='USER_ENTERED', body=body).execute()
+						await update_message(message, message.content + "\n" + f"Updated Pool: https://sealeddeck.tech/{new_id}")
+						return True
+				currRow += 1
+
+
+		except HttpError as err:
+			print(err)
+		return False
 
