@@ -64,7 +64,7 @@ class PoolBot(discord.Client):
 		# If this is true, posts will be limited to #bot-lab and #bot-bunker, and LFM DMs will be ignored.
 		self.dev_mode = False
 		self.pool_channel = self.get_channel(719933932690472970)
-		self.packs_channel = self.get_channel(795671231457263687) # bot lab for now
+		self.packs_channel = self.get_channel(798002275452846111) # bot lab for now
 		self.lfm_channel = self.get_channel(720338190300348559)
 		self.bot_bunker_channel = self.get_channel(1000465465572864141)
 		self.league_committee_channel = self.get_channel(756195275743166655)
