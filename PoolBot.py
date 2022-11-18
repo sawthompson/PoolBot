@@ -282,11 +282,12 @@ class PoolBot(discord.Client):
 			parts = interaction.message.content.split(f"-----")
 			chosen_pack = f"```Chosen Pack:{parts[buttonIndex * 2 + 1]}```"
 			unchosen_pack = f"~~```Other Pack:{parts[abs(1-buttonIndex) * 2 + 1]}```~~"
+			new_content = f"Pack selection made by {interaction.message.mentions[0].mention}\n{chosen_pack}\n{unchosen_pack}"
 			await interaction.response.edit_message(
-				content=f"Pack selection made by {interaction.message.mentions[0].mention}\n{chosen_pack}\n{unchosen_pack}",
+				content=new_content,
 				view=None,
 				embed=None)
-			result = await self.update_pool(user, parts[buttonIndex * 2 + 1], interaction.message)
+			result = await self.update_pool(user, parts[buttonIndex * 2 + 1], interaction.message, new_content)
 			if not result:
 				await update_message(interaction.message, interaction.message.content + "\n" + f"Unable to update pool. Please message Russell S")
 		return callback
@@ -432,7 +433,7 @@ class PoolBot(discord.Client):
 			# if not found:
 			# 	print(member.display_name)
 
-	async def update_pool(self, user, pack_content, message):
+	async def update_pool(self, user, pack_content, message, new_message_content):
 		"""Shows basic usage of the Sheets API.
 		Prints values from a sample spreadsheet.
 		"""
@@ -487,7 +488,7 @@ class PoolBot(discord.Client):
 						}
 						sheet.values().update(spreadsheetId=self.spreadsheet_id,
 							range=f'Pools!E{currRow}:E{currRow}', valueInputOption='USER_ENTERED', body=body).execute()
-						await update_message(message, message.content + "\n" + f"Updated Pool: https://sealeddeck.tech/{new_id}")
+						await update_message(message, new_message_content + "\n" + f"Updated Pool: https://sealeddeck.tech/{new_id}")
 						return True
 				currRow += 1
 
