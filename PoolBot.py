@@ -226,13 +226,14 @@ class PoolBot(discord.Client):
 		while (self.awaiting_boosters_for_user != None):
 			time.sleep(3)
 
-		booster_type = message.content.split(None)[1]
+		booster_one_type = message.content.split(None)[1]
+		booster_two_type = message.content.split(None)[2]
 		self.num_boosters_awaiting = 2
 		self.awaiting_boosters_for_user = message.mentions[0]
 
-		# Generate two packs of the specified type
-		await self.bot_bunker_channel.send(booster_type)
-		await self.bot_bunker_channel.send(booster_type)
+		# Generate two packs of the specified types
+		await self.bot_bunker_channel.send(booster_one_type)
+		await self.bot_bunker_channel.send(booster_two_type)
 
 	async def handle_booster_tutor_response(self, message):
 		assert self.num_boosters_awaiting > 0
