@@ -208,19 +208,19 @@ class PoolBot(discord.Client):
 			)
 
 	async def prompt_user_pick(self, message):
-		# Ensure the user doesn't already have a pending pick to make
-		pendingPickMessage = await self.packs_channel.history().find(
-			lambda m : m.author.name == 'AGL Bot'
-			and m.mentions
-			and m.mentions[0] == message.mentions[0]
-			and f'Pack Option' in m.content
-			)
-		if (pendingPickMessage):
-			await self.packs_channel.send(
-				f'{message.mentions[0].mention} You still have a pending pack selection to make! Please select your '
-				f'previous pack, and then post in #league-committee so someone can can manually generate your new packs.'
-			)
-			return
+		# # Ensure the user doesn't already have a pending pick to make
+		# pendingPickMessage = await self.packs_channel.history().find(
+		# 	lambda m : m.author.name == 'AGL Bot'
+		# 	and m.mentions
+		# 	and m.mentions[0] == message.mentions[0]
+		# 	and f'Pack Option' in m.content
+		# 	)
+		# if (pendingPickMessage):
+		# 	await self.packs_channel.send(
+		# 		f'{message.mentions[0].mention} You still have a pending pack selection to make! Please select your '
+		# 		f'previous pack, and then post in #league-committee so someone can can manually generate your new packs.'
+		# 	)
+		# 	return
 
 		# Messages from Booster Tutor aren't tied to a user, so only one pair can be resolved at a time.
 		while (self.awaiting_boosters_for_user != None):
@@ -273,19 +273,17 @@ class PoolBot(discord.Client):
 			notChosenOption = 'B'
 		else:
 			notChosenOption = 'A'
-		chosenMessage = await self.packs_channel.history().find(
-			lambda message : message.author.name == 'AGL Bot'
-			and message.mentions
-			and message.mentions[0] == user
-			and f'Pack Option {chosenOption}' in message.content
-			)
+		chosenMessage = None
+		async for message in self.packs_channel.history():
+			if message.auther.name == 'AGL Bot' and message.mentions and message.mentions[0] == user and f'Pack Option {chosenOption}' in message.content:
+				chosenMessage = message
+				break
 
-		notChosenMessage = await self.packs_channel.history().find(
-			lambda message : message.author.name == 'AGL Bot'
-			and message.mentions
-			and message.mentions[0] == user
-			and f'Pack Option {notChosenOption}' in message.content
-			)
+		notChosenMessage = None
+		async for message in self.packs_channel.history():
+			if message.auther.name == 'AGL Bot' and message.mentions and message.mentions[0] == user and f'Pack Option {notChosenOption}' in message.content:
+				notChosenMessage = message
+				break
 
 		if not chosenMessage or not notChosenMessage:
 			await user.send(
