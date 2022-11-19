@@ -508,7 +508,7 @@ class PoolBot(discord.Client):
 
 			currRow = 7
 			for row in values:
-				if row[1] in user.display_name:
+				if row[1].lower() in user.display_name.lower():
 					sealeddeck_id = row[4].split("sealeddeck.tech/")[1]
 					pack_json = arena_to_json(pack_content.split("\n", 1)[1])
 					try:
