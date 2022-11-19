@@ -97,9 +97,9 @@ class PoolBot(discord.Client):
 			await self.prompt_user_pick(message)
 			return
 
-		if command == '!addpack' and message.reference:
-			await self.add_pack(message, argument)
-			return
+		# if command == '!addpack' and message.reference:
+			# await self.add_pack(message, argument)
+			# return
 
 		if message.channel == self.lfm_channel and command == '!challenge' and not self.dev_mode:
 				await self.issue_challenge(message)
@@ -376,7 +376,7 @@ class PoolBot(discord.Client):
 				"The message you are replying to does not contain packs I have generated"
 				)
 
-		pack_content = ref.content.split("```")[1].strip()
+		pack_content = ref.content.split("```")[1].split("\n", 1)[1].strip()
 		sealeddeck_id = argument.strip()
 		pack_json = arena_to_json(pack_content)
 		m = await message.channel.send(
