@@ -1,3 +1,4 @@
+from __future__ import print_function
 # bot.py
 import os
 
@@ -7,6 +8,14 @@ import time
 from dotenv import load_dotenv
 from typing import Optional, Sequence, Union
 from datetime import datetime
+
+import os.path
+
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import InstalledAppFlow
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 
 import aiohttp
 import utils
@@ -63,6 +72,7 @@ class PoolBot(discord.Client):
 		self.active_lfm_message = None
 		self.num_boosters_awaiting = 0
 		self.awaiting_boosters_for_user = None
+		self.spreadsheet_id = '1RLvLz_yFV20eseCxdI9ZmLXDKcHWTG2-EuRcdesMD_o'
 		for user in self.users:
 			if (user.name == 'Booster Tutor'):
 				self.booster_tutor = user
@@ -292,15 +302,22 @@ class PoolBot(discord.Client):
 				f"{self.league_committee_channel.mention} if you think this is an error.")
 			return
 
-		await update_message(chosenMessage,
-			f'Pack chosen by {user.mention}.'
-			f'{chosenMessage.content.split(f"!choosePack{chosenOption}`")[1]}')
+		chosen_message_text = f'Pack chosen by {user.mention}.{chosenMessage.content.split(f"!choosePack{chosenOption}`")[1]}'
+
+		await update_message(chosenMessage, chosen_message_text)
 
 		await update_message(notChosenMessage, 
 			f'Pack not chosen by {user.mention}.'
 			f'~~{notChosenMessage.content.split(f"!choosePack{notChosenOption}`")[1]}~~')
 
 		await user.send("Understood. Your selection has been noted.")
+
+		selected_pack = "\n" + chosenMessage.content.split("```")[1]
+
+		result = await self.update_pool(chosenMessage.mentions[0], selected_pack, chosenMessage, chosen_message_text)
+		if not result:
+			await update_message(chosenMessage, chosen_message_text + "\n" + f"Unable to update pool. Please message Russell S")
+
 		return
 
 	async def on_dm(self, message, command, argument):
@@ -452,3 +469,67 @@ class PoolBot(discord.Client):
 			# 		found = True
 			# if not found:
 			# 	print(member.display_name)
+
+	async def update_pool(self, user, pack_content, message, new_message_content):
+		"""Shows basic usage of the Sheets API.
+		Prints values from a sample spreadsheet.
+		"""
+		creds = None
+		# The file token.json stores the user's access and refresh tokens, and is
+		# created automatically when the authorization flow completes for the first
+		# time.
+		if os.path.exists('token.json'):
+			creds = Credentials.from_authorized_user_file('token.json',
+				['https://www.googleapis.com/auth/spreadsheets'])
+		# If there are no (valid) credentials available, let the user log in.
+		if not creds or not creds.valid:
+			if creds and creds.expired and creds.refresh_token:
+				creds.refresh(Request())
+			else:
+				flow = InstalledAppFlow.from_client_secrets_file(
+					'credentials.json', ['https://www.googleapis.com/auth/spreadsheets'])
+				creds = flow.run_local_server(port=0)
+			# Save the credentials for the next run
+			with open('token.json', 'w') as token:
+				token.write(creds.to_json())
+
+		try:
+			service = build('sheets', 'v4', credentials=creds)
+
+			# Call the Sheets API
+			sheet = service.spreadsheets()
+			result = sheet.values().get(spreadsheetId=self.spreadsheet_id,
+										range='Pools!A7:E120').execute()
+			values = result.get('values', [])
+
+			if not values:
+				print('No data found.')
+				return
+
+			currRow = 7
+			for row in values:
+				if row[1] in user.display_name:
+					sealeddeck_id = row[4].split("sealeddeck.tech/")[1]
+					pack_json = arena_to_json(pack_content.split("\n", 1)[1])
+					try:
+						new_id = await pool_to_sealeddeck(
+							pack_json, sealeddeck_id
+						)
+					except aiohttp.ClientResponseError as e:
+						print(f"Sealeddeck error: {e}")
+					else:
+						body = {
+							'values': [
+								[f"https://sealeddeck.tech/{new_id}"],
+							],
+						}
+						sheet.values().update(spreadsheetId=self.spreadsheet_id,
+							range=f'Pools!E{currRow}:E{currRow}', valueInputOption='USER_ENTERED', body=body).execute()
+						await update_message(message, new_message_content + "\n" + f"Updated Pool: https://sealeddeck.tech/{new_id}")
+						return True
+				currRow += 1
+
+
+		except HttpError as err:
+			print(err)
+		return False
