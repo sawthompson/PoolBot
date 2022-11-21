@@ -285,13 +285,13 @@ class PoolBot(discord.Client):
 		else:
 			notChosenOption = 'A'
 		chosenMessage = None
-		async for message in self.packs_channel.history():
+		async for message in self.packs_channel.history(limit=500):
 			if message.author.name == 'AGL Bot' and message.mentions and message.mentions[0] == user and f'Pack Option {chosenOption}' in message.content:
 				chosenMessage = message
 				break
 
 		notChosenMessage = None
-		async for message in self.packs_channel.history():
+		async for message in self.packs_channel.history(limit=500):
 			if message.author.name == 'AGL Bot' and message.mentions and message.mentions[0] == user and f'Pack Option {notChosenOption}' in message.content:
 				notChosenMessage = message
 				break
