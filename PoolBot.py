@@ -221,7 +221,7 @@ class PoolBot(discord.Client):
 			await message.channel.send(
 				f"You can give me one of the following commands:\n"
 				f"> `!challenge`: Challenges the current player in the LFM queue\n"
-				f"> `!randint A B`: Generates a random number n where A <= n <= B. If only one number is given, uses that number as B and defaults A to 1. \n"
+				f"> `!randint A B`: Generates a random integer n, where A <= n <= B. If only one input is given, uses that value as B and defaults A to 1. \n"
 				f"> `!help`: shows this message\n"
 			)
 
@@ -291,11 +291,11 @@ class PoolBot(discord.Client):
 		if (chosenOption == 'A'):
 			notChosenOption = 'B'
 			split = '!chooseUrza`'
-			notChosenSplit = '!chooseMishra'
+			notChosenSplit = '!chooseMishra`'
 		else:
 			notChosenOption = 'A'
 			split = '!chooseMishra`'
-			notChosenSplit = '!chooseUrza'
+			notChosenSplit = '!chooseUrza`'
 		chosenMessage = None
 		async for message in self.packs_channel.history(limit=500):
 			if message.author.name == 'AGL Bot' and message.mentions and message.mentions[0] == user and f'Pack Option {chosenOption}' in message.content:
