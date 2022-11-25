@@ -4,6 +4,7 @@ import os
 
 import discord
 import re
+import random
 import time
 from dotenv import load_dotenv
 from typing import Optional, Sequence, Union
@@ -111,6 +112,18 @@ class PoolBot(discord.Client):
 			await self.add_pack(message, argument)
 			return
 
+		if command == '!randint':
+			args = argv[1].split(None)
+			if len(args) == 1:
+				await message.channel.send(
+					f"{random.randint(1, int(args[0]))}"
+				)
+			else:
+				await message.channel.send(
+					f"{random.randint(int(args[0]), int(args[1]))}"
+				)
+			return
+
 		if message.channel == self.lfm_channel and command == '!challenge' and not self.dev_mode:
 				await self.issue_challenge(message)
 
@@ -207,13 +220,8 @@ class PoolBot(discord.Client):
 		elif command == '!help':
 			await message.channel.send(
 				f"You can give me one of the following commands:\n"
-				f"> `!viewpool {{user}}`: finds and displays the pool, including "
-				f"punishment packs, for a given user. Can reference a user either "
-				f"through an @mention or by their discord name (displayed on their "
-				f"below their nickname, e.g. 'sawyer#8108'. For users with spaces in "
-				f"their names, use quotes, e.g. `!viewpool \"Soy Boy#1234\"`\n"
-				f"> `!setLeagueStartTime`: updates the league start time used to "
-				f"search for pools and packs. Takes in a date in the form YYYY-MM-DD\n"
+				f"> `!challenge`: Challenges the current player in the LFM queue\n"
+				f"> `!randint A B`: Generates a random number n where A <= n <= B. If only one number is given, uses that number as B and defaults A to 1. \n"
 				f"> `!help`: shows this message\n"
 			)
 
@@ -250,12 +258,12 @@ class PoolBot(discord.Client):
 		if self.num_boosters_awaiting == 2:
 			self.num_boosters_awaiting -= 1
 			await self.packs_channel.send(
-				f'Pack Option A for {self.awaiting_boosters_for_user.mention}. To select this pack, DM me `!choosePackA`\n'
+				f'Pack Option A (Urza) for {self.awaiting_boosters_for_user.mention}. To select this pack, DM me `!chooseUrza`\n'
 				f'```{message.content.split("```")[1].strip()}```')
 		else:
 			self.num_boosters_awaiting -= 1
 			await self.packs_channel.send(
-				f'Pack Option B for {self.awaiting_boosters_for_user.mention}. To select this pack, DM me `!choosePackB`\n'
+				f'Pack Option B (Mishra) for {self.awaiting_boosters_for_user.mention}. To select this pack, DM me `!chooseMishra`\n'
 				f'```{message.content.split("```")[1].strip()}```')
 		if self.num_boosters_awaiting == 0:
 			self.awaiting_boosters_for_user = None
@@ -282,8 +290,12 @@ class PoolBot(discord.Client):
 	async def choosePack(self, user, chosenOption):
 		if (chosenOption == 'A'):
 			notChosenOption = 'B'
+			split = '!chooseUrza`'
+			notChosenSplit = '!chooseMishra'
 		else:
 			notChosenOption = 'A'
+			split = '!chooseMishra`'
+			notChosenSplit = '!chooseUrza'
 		chosenMessage = None
 		async for message in self.packs_channel.history(limit=500):
 			if message.author.name == 'AGL Bot' and message.mentions and message.mentions[0] == user and f'Pack Option {chosenOption}' in message.content:
@@ -302,13 +314,13 @@ class PoolBot(discord.Client):
 				f"{self.league_committee_channel.mention} if you think this is an error.")
 			return
 
-		chosen_message_text = f'Pack chosen by {user.mention}.{chosenMessage.content.split(f"!choosePack{chosenOption}`")[1]}'
+		chosen_message_text = f'Pack chosen by {user.mention}.{chosenMessage.content.split(split)[1]}'
 
 		await update_message(chosenMessage, chosen_message_text)
 
 		await update_message(notChosenMessage, 
 			f'Pack not chosen by {user.mention}.'
-			f'~~{notChosenMessage.content.split(f"!choosePack{notChosenOption}`")[1]}~~')
+			f'~~{notChosenMessage.content.split(notChosenSplit)[1]}~~')
 
 		await user.send("Understood. Your selection has been noted.")
 
@@ -324,11 +336,11 @@ class PoolBot(discord.Client):
 		if (self.dev_mode):
 			return
 
-		if command == '!choosepacka':
+		if command == '!choosepacka' or command == '!chooseurza':
 			await self.choosePack(message.author, 'A')
 			return
 
-		if command == '!choosepackb':
+		if command == '!choosepackb' or command == '!choosemishra':
 			await self.choosePack(message.author, 'B')
 			return
 
