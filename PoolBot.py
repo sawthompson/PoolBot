@@ -59,12 +59,7 @@ async def update_message(message, new_content):
 
 async def message_member(member):
     try:
-        await member.send(
-            "Greetings, Arena Gauntlet League player! We're happy to announce our tournament series has returned with the PLANECHASE league."
-            "\n\nThis league's new mechanic is 'Planes'. At the beginning of each of the 6 weeks of play, all players will simultaneously enter a new 'Plane' with its own rules that affect deckbuilding, and / or the kinds of packs that can be added to your card pool..."
-            "\n\nIf chaos is your kind of Magic tournament, sign up here: https://forms.gle/AMoqEmsoBcWp3Sw1A. Registration closes at 5pm on Wednesday January 4th, 2023."
-            " We hope to traverse the Multiverse with you soon!\n\nNote: Replies to this message won`t be read. Please DM Chris Y instead."
-        )
+        await member.send("Greetings, Arena Gauntlet League player!")
         time.sleep(0.25)
     except discord.errors.Forbidden as e:
         print(e)
@@ -135,6 +130,10 @@ class PoolBot(discord.Client):
             if message.author == self.user:
                 return
             await self.on_dm(message, command, argument)
+            return
+
+        if command == '!becomecompleat' and message.channel == self.pool_channel:
+            await self.compleat_player(message)
             return
 
         if command == '!playerchoice' and message.channel == self.packs_channel:
@@ -363,12 +362,12 @@ class PoolBot(discord.Client):
 
         await user.send("Understood. Your selection has been noted.")
 
-        selected_pack = "\n" + chosen_message.content.split("```")[1]
-
-        result = await self.update_pool(chosen_message.mentions[0], selected_pack, chosen_message, chosen_message_text)
-        if not result:
-            await update_message(chosen_message,
-                                 chosen_message_text + "\n" + f"Unable to update pool. Please message Russell S")
+        # selected_pack = "\n" + chosen_message.content.split("```")[1]
+        # result =
+        # await self.update_pool(chosen_message.mentions[0], selected_pack, chosen_message, chosen_message_text)
+        # if not result:
+        #     await update_message(chosen_message,
+        #                          chosen_message_text + "\n" + f"Unable to update pool. Please message Russell S")
 
         return
 
@@ -515,7 +514,28 @@ class PoolBot(discord.Client):
         # if not found:
         # 	print(member.display_name)
 
-    async def update_pool(self, user, pack_content, message, new_message_content):
+    async def compleat_player(self, message):
+        # TODO: update sheet values, and add reading/writing compleat state
+        spreadsheet_values = await self.get_spreadsheet_values('Standings!C6:H120')
+        if not spreadsheet_values:
+            return await message.reply(f'Sorry, but I cannot access the spreadsheet. '
+                                       f'Please post in {self.league_committee_channel.mention}')
+
+        loss_count = 'not found'
+        for row in spreadsheet_values:
+            if len(row) < 6:
+                continue
+            if row[0].lower() != '' and row[0].lower() in message.author.display_name.lower():
+                loss_count = int(row[5])
+                break
+        if loss_count == 'not found':
+            return await message.reply(f'Unable to find your account in the league spreadsheet.'
+                                       f'Please post in {self.league_committee_channel.mention}')
+        if loss_count < 3:
+            return await message.reply('Sorry, but you cannot become compleat until you have at least 3 losses')
+        return await message.reply(f'!bro {loss_count + 6} {message.author.mention}')
+
+    async def get_spreadsheet_values(self, range):
         creds = None
         # The file token.json stores the user's access and refresh tokens, and is
         # created automatically when the authorization flow completes for the first
@@ -541,38 +561,41 @@ class PoolBot(discord.Client):
             # Call the Sheets API
             sheet = service.spreadsheets()
             result = sheet.values().get(spreadsheetId=self.spreadsheet_id,
-                                        range='Pools!A7:E120').execute()
-            values = result.get('values', [])
-
-            if not values:
-                print('No data found.')
-                return
-
-            curr_row = 7
-            for row in values:
-                if row[1].lower() in user.display_name.lower():
-                    sealeddeck_id = row[4].split("sealeddeck.tech/")[1]
-                    pack_json = arena_to_json(pack_content.split("\n", 1)[1])
-                    try:
-                        new_id = await pool_to_sealeddeck(
-                            pack_json, sealeddeck_id
-                        )
-                    except aiohttp.ClientResponseError as e:
-                        print(f"Sealeddeck error: {e}")
-                    else:
-                        body = {
-                            'values': [
-                                [f"https://sealeddeck.tech/{new_id}"],
-                            ],
-                        }
-                        sheet.values().update(spreadsheetId=self.spreadsheet_id,
-                                              range=f'Pools!E{curr_row}:E{curr_row}', valueInputOption='USER_ENTERED',
-                                              body=body).execute()
-                        await update_message(message,
-                                             new_message_content + f"\nUpdated Pool: https://sealeddeck.tech/{new_id}")
-                        return True
-                curr_row += 1
-
+                                        range=range).execute()
+            return result.get('values', [])
         except HttpError as err:
             print(err)
-        return False
+        return []
+
+    # async def update_pool(self, user, pack_content, message, new_message_content):
+    #     values = await self.get_spreadsheet_values()
+    #     if not values:
+    #         print('No data found.')
+    #         return
+    #
+    #     curr_row = 7
+    #     for row in values:
+    #         if row[1].lower() in user.display_name.lower():
+    #             sealeddeck_id = row[4].split("sealeddeck.tech/")[1]
+    #             pack_json = arena_to_json(pack_content.split("\n", 1)[1])
+    #             try:
+    #                 new_id = await pool_to_sealeddeck(
+    #                     pack_json, sealeddeck_id
+    #                 )
+    #             except aiohttp.ClientResponseError as e:
+    #                 print(f"Sealeddeck error: {e}")
+    #             else:
+    #                 body = {
+    #                     'values': [
+    #                         [f"https://sealeddeck.tech/{new_id}"],
+    #                     ],
+    #                 }
+    #                 sheet.values().update(spreadsheetId=self.spreadsheet_id,
+    #                                       range=f'Pools!E{curr_row}:E{curr_row}', valueInputOption='USER_ENTERED',
+    #                                       body=body).execute()
+    #                 await update_message(message,
+    #                                      new_message_content + f"\nUpdated Pool: https://sealeddeck.tech/{new_id}")
+    #                 return True
+    #         curr_row += 1
+
+
