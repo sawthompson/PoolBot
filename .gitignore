@@ -133,6 +133,7 @@ dmypy.json
 
 # local config
 config.yaml
+token.json
 
 # MTGJSON database
 AllPrintings*.json
