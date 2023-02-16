@@ -527,17 +527,23 @@ class PoolBot(discord.Client):
                                        f'Please post in {self.league_committee_channel.mention}')
 
         loss_count = 'not found'
+        compleat = false
         for row in spreadsheet_values:
             if len(row) < 6:
                 continue
+            if row[7].lower() == 'true':
+                compleat = true
             if row[0].lower() != '' and row[0].lower() in message.author.display_name.lower():
                 loss_count = int(row[5])
                 break
+
         if loss_count == 'not found':
             return await message.reply(f'Unable to find your account in the league spreadsheet.'
                                        f'Please post in {self.league_committee_channel.mention}')
         if loss_count < 3:
             return await message.reply('Sorry, but you cannot become compleat until you have at least 3 losses')
+        if compleat == true:
+            return await message.reply('You are already compleat!')
         return await message.reply(f'!one {loss_count + 6} {message.author.mention}')
 
     async def get_spreadsheet_values(self, range):
