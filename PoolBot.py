@@ -538,7 +538,7 @@ class PoolBot(discord.Client):
                                        f'Please post in {self.league_committee_channel.mention}')
         if loss_count < 3:
             return await message.reply('Sorry, but you cannot become compleat until you have at least 3 losses')
-        return await message.reply(f'!bro {loss_count + 6} {message.author.mention}')
+        return await message.reply(f'!one {loss_count + 6} {message.author.mention}')
 
     async def get_spreadsheet_values(self, range):
         creds = None
