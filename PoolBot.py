@@ -520,7 +520,6 @@ class PoolBot(discord.Client):
                 print('DMed ' + member.display_name)
 
     async def compleat_player(self, message):
-        # TODO: update sheet values, and add reading/writing compleat state
         spreadsheet_values = await self.get_spreadsheet_values('Standings!C6:H120')
         if not spreadsheet_values:
             return await message.reply(f'Sorry, but I cannot access the spreadsheet. '
@@ -528,23 +527,36 @@ class PoolBot(discord.Client):
 
         loss_count = 'not found'
         compleat = false
+        curr_row = 7 
         for row in spreadsheet_values:
             if len(row) < 6:
                 continue
-            if row[7].lower() == 'true':
-                compleat = true
             if row[0].lower() != '' and row[0].lower() in message.author.display_name.lower():
                 loss_count = int(row[5])
+                if row[5].lower() == 'compleated':
+                    compleat = true
                 break
+            curr_row++
 
         if loss_count == 'not found':
             return await message.reply(f'Unable to find your account in the league spreadsheet.'
                                        f'Please post in {self.league_committee_channel.mention}')
         if loss_count < 3:
-            return await message.reply('Sorry, but you cannot become compleat until you have at least 3 losses')
+            return await message.reply('The machine orthodoxy has evaluated you and found you wanting, but fear not. The glory of compleation will be yours in time.')
         if compleat == true:
             return await message.reply('You are already compleat!')
-        return await message.reply(f'!one {loss_count + 6} {message.author.mention}')
+        await message.reply(f'!one {loss_count + 6} {message.author.mention}\n\n“Our glorious infection has taken hold.” - Elesh Norn')
+        
+        # Update the proper cell in the spreadsheet        
+        body = {
+            'values': [
+                ['Compleated'],
+            ],
+        }
+        sheet.values().update(spreadsheetId=self.spreadsheet_id,
+                              range=f'Standings!E{curr_row}:E{curr_row}', valueInputOption='USER_ENTERED',
+                              body=body).execute()
+
 
     async def get_spreadsheet_values(self, range):
         creds = None
