@@ -557,7 +557,7 @@ class PoolBot(discord.Client):
         if loss_count < 3:
             return await message.reply('The machine orthodoxy has evaluated you and found you wanting, but fear not. The glory of compleation will be yours in time.')
         if compleat == True:
-            return await message.reply('You are already compleat!')
+            return await message.reply("Phyrexia approves of your enthusiasm, but you have already been reshaped by Norn's will. How could you ever hope to improve upon her perfection?")
 
         await message.reply(f'!one {loss_count + 6} {message.author.mention}\n\n{random.choice(COMPLEATION_FLAVOR_MESSAGES)}')
         
