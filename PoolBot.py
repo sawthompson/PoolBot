@@ -553,7 +553,7 @@ class PoolBot(discord.Client):
                 ['Compleated'],
             ],
         }
-        self.sheet.values.update(spreadsheetId=self.spreadsheet_id,
+        self.sheet.values().update(spreadsheetId=self.spreadsheet_id,
                               range=f'Standings!E{curr_row}:E{curr_row}', valueInputOption='USER_ENTERED',
                               body=body).execute()
 
