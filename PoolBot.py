@@ -526,7 +526,7 @@ class PoolBot(discord.Client):
                                        f'Please post in {self.league_committee_channel.mention}')
 
         loss_count = 'not found'
-        compleat = false
+        compleat = False
         curr_row = 7 
         for row in spreadsheet_values:
             if len(row) < 6:
@@ -534,16 +534,16 @@ class PoolBot(discord.Client):
             if row[0].lower() != '' and row[0].lower() in message.author.display_name.lower():
                 loss_count = int(row[5])
                 if row[5].lower() == 'compleated':
-                    compleat = true
+                    compleat = True
                 break
-            curr_row++
+            curr_row += 1
 
         if loss_count == 'not found':
             return await message.reply(f'Unable to find your account in the league spreadsheet.'
                                        f'Please post in {self.league_committee_channel.mention}')
         if loss_count < 3:
             return await message.reply('The machine orthodoxy has evaluated you and found you wanting, but fear not. The glory of compleation will be yours in time.')
-        if compleat == true:
+        if compleat == True:
             return await message.reply('You are already compleat!')
         await message.reply(f'!one {loss_count + 6} {message.author.mention}\n\n“Our glorious infection has taken hold.” - Elesh Norn')
         
@@ -553,7 +553,7 @@ class PoolBot(discord.Client):
                 ['Compleated'],
             ],
         }
-        sheet.values().update(spreadsheetId=self.spreadsheet_id,
+        self.sheet.values.update(spreadsheetId=self.spreadsheet_id,
                               range=f'Standings!E{curr_row}:E{curr_row}', valueInputOption='USER_ENTERED',
                               body=body).execute()
 
@@ -582,8 +582,8 @@ class PoolBot(discord.Client):
             service = build('sheets', 'v4', credentials=creds)
 
             # Call the Sheets API
-            sheet = service.spreadsheets()
-            result = sheet.values().get(spreadsheetId=self.spreadsheet_id,
+            self.sheet = service.spreadsheets()
+            result = self.sheet.values().get(spreadsheetId=self.spreadsheet_id,
                                         range=range).execute()
             return result.get('values', [])
         except HttpError as err:
