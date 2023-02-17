@@ -25,6 +25,19 @@ load_dotenv()
 
 SEALEDDECK_URL = "https://sealeddeck.tech/api/pools"
 
+COMPLEATION_FLAVOR_MESSAGES = [
+    'With the White Sun cresting above you a sense of hope and peace and oil washes over you. The ichor flows inside, washing away the doubt. If only all could know the embrace of the Mother.',
+    '“The Work must continue. All shall be One.“',
+    '“A Wise Choice” -Jin Gitaxias',
+    '“Welcome to the Family” -Urabrask',
+    '“Now you shall be strong enough to survive” -Vorinclex',
+    '“Fall to your knees and welcome our embrace.” - Qal-Sha, Priest of Norn',
+    '"Behold blessed perfection" - Sheoldred, Whispering One',
+    '“May you rejoice in the magnificence of Norn. May your flesh serve perfection.”',
+    '"From void evolved Phyrexia. Great Yawgmoth, Father of Machines, saw its perfection. Thus The Grand Evolution began."',
+    '“Beg me for life, and I will fill you with the glory of Phyrexian perfection”',
+]
+
 
 def arena_to_json(arena_list: str) -> Sequence[dict]:
     """Convert a list of cards in arena format to a list of json cards"""
@@ -545,7 +558,10 @@ class PoolBot(discord.Client):
             return await message.reply('The machine orthodoxy has evaluated you and found you wanting, but fear not. The glory of compleation will be yours in time.')
         if compleat == True:
             return await message.reply('You are already compleat!')
-        await message.reply(f'!one {loss_count + 6} {message.author.mention}\n\n“Our glorious infection has taken hold.” - Elesh Norn')
+        
+        flavor_message = '“Our glorious infection has taken hold.” - Elesh Norn'
+        swit
+        await message.reply(f'!one {loss_count + 6} {message.author.mention}\n\n{random.choice(COMPLEATION_FLAVOR_MESSAGES)}')
         
         # Update the proper cell in the spreadsheet        
         body = {
