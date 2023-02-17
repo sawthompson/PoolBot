@@ -546,7 +546,7 @@ class PoolBot(discord.Client):
                 continue
             if row[0].lower() != '' and row[0].lower() in message.author.display_name.lower():
                 loss_count = int(row[5])
-                if row[5].lower() == 'compleated':
+                if row[2].lower() == 'compleated':
                     compleat = True
                 break
             curr_row += 1
