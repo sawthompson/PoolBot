@@ -527,7 +527,7 @@ class PoolBot(discord.Client):
 
         loss_count = 'not found'
         compleat = False
-        curr_row = 7 
+        curr_row = 6
         for row in spreadsheet_values:
             if len(row) < 6:
                 continue
