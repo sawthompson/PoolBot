@@ -558,9 +558,7 @@ class PoolBot(discord.Client):
             return await message.reply('The machine orthodoxy has evaluated you and found you wanting, but fear not. The glory of compleation will be yours in time.')
         if compleat == True:
             return await message.reply('You are already compleat!')
-        
-        flavor_message = '“Our glorious infection has taken hold.” - Elesh Norn'
-        swit
+
         await message.reply(f'!one {loss_count + 6} {message.author.mention}\n\n{random.choice(COMPLEATION_FLAVOR_MESSAGES)}')
         
         # Update the proper cell in the spreadsheet        
