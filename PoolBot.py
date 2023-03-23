@@ -72,7 +72,8 @@ async def update_message(message, new_content):
 
 async def message_member(member):
     try:
-        await member.send("Greetings, current or former Arena Gauntlet League player! We're happy to announce that we're back for our Phyrexia: All Will Be One edition of the league.\n\nThis new league brings with it a new mechanic, in which players can succumb to temptation and become 'compleat' by trading in their pool for an equivalent number of random ONE packs. Will you succumb to the glistening oil, or attempt to preserve your humanity?\n\nSign up here: https://forms.gle/3mTgRyjtN5bZUuG8A. Registration closes Wednesday February 15th.\n\nWe hope to see you there!")
+        await member.send(
+            "Greetings, current or former Arena Gauntlet League player! We're happy to announce that we're back for our Phyrexia: All Will Be One edition of the league.\n\nThis new league brings with it a new mechanic, in which players can succumb to temptation and become 'compleat' by trading in their pool for an equivalent number of random ONE packs. Will you succumb to the glistening oil, or attempt to preserve your humanity?\n\nSign up here: https://forms.gle/3mTgRyjtN5bZUuG8A. Registration closes Wednesday February 15th.\n\nWe hope to see you there!")
         time.sleep(0.25)
     except discord.errors.Forbidden as e:
         print(e)
@@ -120,6 +121,15 @@ class PoolBot(discord.Client):
             if user.name == 'Booster Tutor':
                 self.booster_tutor = user
 
+    async def on_message_edit(self, before, after):
+        # Booster tutor adds sealeddeck.tech links as part of an edit operation
+        if self.dev_mode and before.author == self.booster_tutor:
+            if before.channel == self.pool_channel and "Sealeddeck.tech link" not in before.content and\
+                    "Sealeddeck.tech link" in after.content:
+                # Edit adds a sealeddeck link
+                await self.track_starting_pool(after)
+                return
+
     async def on_message(self, message):
         # As part of the !playerchoice flow, repost Booster Tutor packs in pack-generation with instructions for
         # the appropriate user to select their pack.
@@ -127,6 +137,12 @@ class PoolBot(discord.Client):
                 and message.mentions[0] == self.user):
             await self.handle_booster_tutor_response(message)
             return
+
+        if self.dev_mode and message.author == self.booster_tutor:
+            if message.channel == self.packs_channel and "```" in message.content:
+                # Message is a generated pack
+                await self.track_pack(message)
+                return
 
         # Split the string on the first space
         argv = message.content.split(None, 1)
@@ -171,97 +187,6 @@ class PoolBot(discord.Client):
 
         if message.channel == self.lfm_channel and command == '!challenge':
             await self.issue_challenge(message)
-
-        if command == '!viewpool':
-            # Support viewing the pool of a user by referencing their name instead of mentioning them
-            member = self.guilds[0].get_member_named(argument)
-            if member is None:
-                await message.channel.send(
-                    f"{message.author.mention}\n"
-                    f"No user could be found with that name. Make sure you're using "
-                    f"their discord identifying name, and not their guild nickname. "
-                    f"Names with spaces must be surrounded by quotes.\n"
-                )
-                return
-        else:
-            member = message.author
-
-        if command == '!viewpool':
-            m = await message.channel.send(
-                f"{message.author.mention}\n"
-                f":hourglass: Searching for user's pool..."
-            )
-            pool = await self.find_pool(member.id)
-            if pool == 'nopool':
-                await update_message(m,
-                                     f"{message.author.mention}\n"
-                                     f"Unable to find pool for user. Are you sure they are in the "
-                                     f"current league?"
-                                     )
-                return
-            if pool == 'error':
-                await update_message(m,
-                                     f"{message.author.mention}\n"
-                                     f"Unable to find pool for user. This likely means that no "
-                                     f"sealeddeck.tech link was generated for them with their pool. "
-                                     f"You'll have to scout them manually. Sorry!"
-                                     )
-                return
-
-            await update_message(m,
-                                 f"{message.author.mention}\n"
-                                 f":hourglass: Pool found. Searching for punishment packs..."
-                                 )
-
-            packs = await self.find_packs(member.id)
-
-            if len(packs) == 0:
-                await update_message(m,
-                                     f"{message.author.mention}\n"
-                                     f"No punishment packs could be found. "
-                                     f"Starting pool link: https://sealeddeck.tech/{pool}"
-                                     )
-                return
-            await update_message(m,
-                                 f"{message.author.mention}\n"
-                                 f":hourglass: Found punishment pack(s). Adding to pool..."
-                                 )
-            try:
-                if len(packs) < 8:
-                    pack_json = arena_to_json('\n'.join(packs))
-                    new_id = await pool_to_sealeddeck(pack_json, pool)
-                else:
-                    # Sealeddeck seems to be unable to handle adding more than 8 packs at a time.
-                    # For large pools, split the pack-adding into two separate requests.
-                    first_half_pack_json = arena_to_json('\n'.join(packs[:6]))
-                    second_half_pack_json = arena_to_json('\n'.join(packs[6:]))
-                    first_half_new_id = await pool_to_sealeddeck(first_half_pack_json, pool)
-                    new_id = await pool_to_sealeddeck(second_half_pack_json, first_half_new_id)
-            except aiohttp.ClientResponseError as e:
-                print(e)
-                content = (
-                    f"{message.author.mention}\n"
-                    f"The packs could not be added to sealeddeck.tech."
-                )
-
-            else:
-                content = (
-                    f"{message.author.mention}\n"
-                    f"Found {len(packs)} pack(s) and added them to the user's pool.\n\n"
-                    f"**Generated sealeddeck.tech pool**\n"
-                    f"link: https://sealeddeck.tech/{new_id}\n"
-                    f"ID: `{new_id}`\n"
-                    f"Note: This is still an experimental bot, and generated pools may "
-                    f"not be accurate. Please contact Sawyer T with any questions or if "
-                    f"you encounter any issues."
-                )
-            await update_message(m, content)
-        elif command == '!setleaguestarttime':
-            self.league_start = datetime.fromisoformat(argument)
-            await message.channel.send(
-                f"League start time updated to {argument}. Commands will now only look "
-                f"for packs after that date."
-            )
         elif command == '!help':
             await message.channel.send(
                 f"You can give me one of the following commands:\n"
@@ -270,6 +195,93 @@ class PoolBot(discord.Client):
                 f"uses that value as B and defaults A to 1. \n "
                 f"> `!help`: shows this message\n"
             )
+
+    async def track_starting_pool(self, message):
+        # Handle cases where Booster Tutor fails to generate a sealeddeck.tech link
+        if '**Sealeddeck.tech:** Error' in message.content:
+            # TODO: highlight the pool cell red and DM someone if this happens
+            return
+
+        # Use a regex to pull the sealeddeck id out of the message
+        sealed_deck_id = \
+            re.search("(?P<url>https?://[^\s]+)", message.content).group("url").split('sealeddeck.tech/')[1]
+        sealed_deck_link = f'https://sealeddeck.tech/{sealed_deck_id}'
+
+        spreadsheet_values = await self.get_spreadsheet_values('Pools!B7:F200')
+
+        curr_row = 6
+        for row in spreadsheet_values:
+            curr_row += 1
+            if len(row) < 1:
+                continue
+            if row[0].lower() != '' and row[0].lower() in message.mentions[0].display_name.lower():
+                # Update the proper cell in the spreadsheet
+                body = {
+                    'values': [
+                        # [f'=HYPERLINK("{sealed_deck_link}", "Link")', f'=HYPERLINK("{sealed_deck_link}", "Link")'],
+                        [sealed_deck_link, sealed_deck_link],
+                    ],
+                }
+                self.sheet.values().update(spreadsheetId=self.spreadsheet_id,
+                                           range=f'Pools!E{curr_row}:F{curr_row}', valueInputOption='USER_ENTERED',
+                                           body=body).execute()
+
+                return
+        # TODO do something if the value could not be found
+        return
+
+    async def track_pack(self, message):
+        # Get sealeddeck link and loss count from spreadsheet
+        spreadsheet_values = await self.get_spreadsheet_values('Pools!B7:P200')
+        curr_row = 6
+        current_pool = 'Not found'
+        loss_count = 0
+        for row in spreadsheet_values:
+            curr_row += 1
+            if len(row) < 5:
+                continue
+            if row[0].lower() != '' and row[0].lower() in message.mentions[0].display_name.lower():
+                current_pool = row[3]
+                loss_count = int(row[2])
+                break
+        if current_pool == 'Not found':
+            print("rut row")
+            return
+        if current_pool == '':
+            # TODO: if no link, highlight current loss cell red
+            return
+
+        # Add pack to link
+        pack_content = message.content.split("```")[1].strip()
+        pack_json = arena_to_json(pack_content)
+        updated_pool_id = await pool_to_sealeddeck(
+            pack_json, current_pool.split('.tech/')[1]
+        )
+        new_pack_id = await pool_to_sealeddeck(pack_json)
+
+        # Write new pack to spreadsheet
+        pack_body = {
+            'values': [
+                [f'=HYPERLINK("https://sealeddeck.tech/{new_pack_id}", "Link")'],
+            ],
+        }
+        # Find the proper column ID
+        col = chr(ord('F') + loss_count)
+        self.sheet.values().update(spreadsheetId=self.spreadsheet_id,
+                                   range=f'Pools!{col}{curr_row}:{col}{curr_row}', valueInputOption='USER_ENTERED',
+                                   body=pack_body).execute()
+
+        # Write updated pool to spreadsheet
+        pool_body = {
+            'values': [
+                [f'https://sealeddeck.tech/{updated_pool_id}'],
+            ],
+        }
+        self.sheet.values().update(spreadsheetId=self.spreadsheet_id,
+                                   range=f'Pools!E{curr_row}:E{curr_row}', valueInputOption='USER_ENTERED',
+                                   body=pool_body).execute()
+
+        return
 
     async def prompt_user_pick(self, message):
         # # Ensure the user doesn't already have a pending pick to make
@@ -488,31 +500,6 @@ class PoolBot(discord.Client):
             )
         await m.edit(content=content)
 
-    async def find_pool(self, user_id):
-        async for message in self.pool_channel.history(limit=1000, after=self.league_start).filter(
-                lambda m: m.author.name == 'Booster Tutor'):
-            for mentionedUser in message.mentions:
-                if mentionedUser.id == user_id:
-                    # Handle cases where Booster Tutor fails to generate a sealeddeck.tech link
-                    if '**Sealeddeck.tech:** Error' in message.content:
-                        return 'error'
-                    # Use a regex to pull the sealeddeck id out of the message
-                    link = \
-                        re.search("(?P<url>https?://[^\s]+)", message.content).group("url").split('sealeddeck.tech/')[1]
-                    return link
-        return 'nopool'
-
-    async def find_packs(self, user_id):
-        packs = []
-        async for message in self.packs_channel.history(limit=5000, after=self.league_start).filter(
-                lambda m: m.author.name == 'Booster Tutor'):
-            for mentionedUser in message.mentions:
-                # Exclude non-pack Booster Tutor messages, e.g. responses to !addpack
-                if mentionedUser.id == user_id and "```" in message.content:
-                    pack_content = message.content.split("```")[1].strip()
-                    packs.append(pack_content)
-        return packs
-
     async def print_members_not_in_league(self, league_name):
         for member in self.guilds[0].members:
             found = False
@@ -555,12 +542,15 @@ class PoolBot(discord.Client):
             return await message.reply(f'Unable to find your account in the league spreadsheet.'
                                        f'Please post in {self.league_committee_channel.mention}')
         if loss_count < 3:
-            return await message.reply('The machine orthodoxy has evaluated you and found you wanting, but fear not. The glory of compleation will be yours in time.')
+            return await message.reply(
+                'The machine orthodoxy has evaluated you and found you wanting, but fear not. The glory of compleation will be yours in time.')
         if compleat == True:
-            return await message.reply("Phyrexia approves of your enthusiasm, but you have already been reshaped by Norn's will. How could you ever hope to improve upon her perfection?")
+            return await message.reply(
+                "Phyrexia approves of your enthusiasm, but you have already been reshaped by Norn's will. How could you ever hope to improve upon her perfection?")
 
-        await message.reply(f'!one {loss_count + 6} {message.author.mention}\n\n{random.choice(COMPLEATION_FLAVOR_MESSAGES)}')
-        
+        await message.reply(
+            f'!one {loss_count + 6} {message.author.mention}\n\n{random.choice(COMPLEATION_FLAVOR_MESSAGES)}')
+
         # Update the proper cell in the spreadsheet        
         body = {
             'values': [
@@ -568,9 +558,8 @@ class PoolBot(discord.Client):
             ],
         }
         self.sheet.values().update(spreadsheetId=self.spreadsheet_id,
-                              range=f'Standings!E{curr_row}:E{curr_row}', valueInputOption='USER_ENTERED',
-                              body=body).execute()
-
+                                   range=f'Standings!E{curr_row}:E{curr_row}', valueInputOption='USER_ENTERED',
+                                   body=body).execute()
 
     async def get_spreadsheet_values(self, range):
         creds = None
@@ -598,41 +587,8 @@ class PoolBot(discord.Client):
             # Call the Sheets API
             self.sheet = service.spreadsheets()
             result = self.sheet.values().get(spreadsheetId=self.spreadsheet_id,
-                                        range=range).execute()
+                                             range=range).execute()
             return result.get('values', [])
         except HttpError as err:
             print(err)
         return []
-
-    # async def update_pool(self, user, pack_content, message, new_message_content):
-    #     values = await self.get_spreadsheet_values()
-    #     if not values:
-    #         print('No data found.')
-    #         return
-    #
-    #     curr_row = 7
-    #     for row in values:
-    #         if row[1].lower() in user.display_name.lower():
-    #             sealeddeck_id = row[4].split("sealeddeck.tech/")[1]
-    #             pack_json = arena_to_json(pack_content.split("\n", 1)[1])
-    #             try:
-    #                 new_id = await pool_to_sealeddeck(
-    #                     pack_json, sealeddeck_id
-    #                 )
-    #             except aiohttp.ClientResponseError as e:
-    #                 print(f"Sealeddeck error: {e}")
-    #             else:
-    #                 body = {
-    #                     'values': [
-    #                         [f"https://sealeddeck.tech/{new_id}"],
-    #                     ],
-    #                 }
-    #                 sheet.values().update(spreadsheetId=self.spreadsheet_id,
-    #                                       range=f'Pools!E{curr_row}:E{curr_row}', valueInputOption='USER_ENTERED',
-    #                                       body=body).execute()
-    #                 await update_message(message,
-    #                                      new_message_content + f"\nUpdated Pool: https://sealeddeck.tech/{new_id}")
-    #                 return True
-    #         curr_row += 1
-
-
