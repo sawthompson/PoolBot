@@ -203,22 +203,16 @@ class PoolBot(discord.Client):
             )
 
     async def investigate(self, message):
-        print("starting investigation")
         # Get sealeddeck link and loss count from spreadsheet
         spreadsheet_values = await self.get_spreadsheet_values('Pools!B7:Q200')
         curr_row = 6
-        current_pool = 'Not found'
-        loss_count = 0
-        can_investigate = False
-        investigating = False
-        prev_pool = 'Not found'
         for row in spreadsheet_values:
             curr_row += 1
             if len(row) < 5:
                 continue
             if row[0].lower() != '' and row[0].lower() in message.author.display_name.lower():
                 if row[15] == 'No':
-                    message.reply(f'By my records, you cannot currently investigate. If this is in error, '
+                    await message.reply(f'By my records, you cannot currently investigate. If this is in error, '
                                   f'please post in {self.league_committee_channel.mention}')
                     return
 
@@ -230,6 +224,8 @@ class PoolBot(discord.Client):
                 # Roll a new pack
                 await self.packs_channel.send(f'!cube SIRLeague {message.author.mention} searches for answers')
                 break
+        await message.reply(f'Hmm, I can\'t find you in the league spreadsheet. '
+                      f'Please post in {self.league_committee_channel.mention}')
 
     async def track_starting_pool(self, message):
         # Handle cases where Booster Tutor fails to generate a sealeddeck.tech link
@@ -294,7 +290,7 @@ class PoolBot(discord.Client):
 
         # SIR-SPECIFIC
         if investigating:
-            # Set "investigating" and "can investigate"
+            # Set "investigating" and "can investigate" to 'No'
             self.sheet.values().update(spreadsheetId=self.spreadsheet_id,
                                        range=f'Pools!Q{curr_row}:R{curr_row}', valueInputOption='USER_ENTERED',
                                        body={'values': [['No', 'No']]}).execute()
