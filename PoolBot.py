@@ -112,6 +112,7 @@ class PoolBot(discord.Client):
             1065101040770363442)
         self.bot_bunker_channel = self.get_channel(1000465465572864141) if not self.dev_mode else self.get_channel(
             1065101076002508800)
+
         self.league_committee_channel = self.get_channel(1052324453188632696) if not self.dev_mode else self.get_channel(
             1065101182525259866)
         self.pending_lfm_user_mention = None
