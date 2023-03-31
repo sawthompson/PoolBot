@@ -223,7 +223,7 @@ class PoolBot(discord.Client):
 
                 # Roll a new pack
                 await self.packs_channel.send(f'!cube SIRLeague {message.author.mention} searches for answers')
-                break
+                return
         await message.reply(f'Hmm, I can\'t find you in the league spreadsheet. '
                       f'Please post in {self.league_committee_channel.mention}')
 
@@ -313,6 +313,7 @@ class PoolBot(discord.Client):
         try:
             new_pack_id = await pool_to_sealeddeck(pack_json)
         except:
+            print("sealeddeck issue — generating pack")
             # If something goes wrong with sealeddeck, highlight the pack cell red
             await self.set_cell_to_red(curr_row, chr(ord('F') + loss_count))
             return
@@ -329,7 +330,7 @@ class PoolBot(discord.Client):
                 pack_json, current_pool.split('.tech/')[1]
             )
         except:
-            print("something's wrong")
+            print("sealeddeck issue — updating pool")
             # If something goes wrong with sealeddeck, highlight the pack cell red
             await self.set_cell_to_red(curr_row, chr(ord('F') + loss_count))
             return
