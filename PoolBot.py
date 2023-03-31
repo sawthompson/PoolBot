@@ -57,10 +57,16 @@ async def pool_to_sealeddeck(
     if pool_sealeddeck_id:
         deck["poolId"] = pool_sealeddeck_id
 
-    async with aiohttp.ClientSession() as session:
-        async with session.post(SEALEDDECK_URL, json=deck) as resp:
-            resp.raise_for_status()
-            resp_json = await resp.json()
+    for attempt in range(3):
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(SEALEDDECK_URL, json=deck) as resp:
+                    resp.raise_for_status()
+                    resp_json = await resp.json()
+        except:
+            continue
+        else:
+            break
 
     return resp_json["poolId"]
 
