@@ -149,7 +149,8 @@ class PoolBot(discord.Client):
 
         # Split the string on the first space
         argv = message.content.split(None, 1)
-        assert len(argv)
+        if len(argv) == 0:
+            return
         command = argv[0].lower()
         argument = ''
         if '"' in message.content:
