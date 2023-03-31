@@ -125,7 +125,7 @@ class PoolBot(discord.Client):
 
     async def on_message_edit(self, before, after):
         # Booster tutor adds sealeddeck.tech links as part of an edit operation
-        if self.dev_mode and before.author == self.booster_tutor:
+        if before.author == self.booster_tutor:
             if before.channel == self.pool_channel and "Sealeddeck.tech link" not in before.content and\
                     "Sealeddeck.tech link" in after.content:
                 # Edit adds a sealeddeck link
@@ -140,7 +140,7 @@ class PoolBot(discord.Client):
             await self.handle_booster_tutor_response(message)
             return
 
-        if self.dev_mode and message.author == self.booster_tutor:
+        if message.author == self.booster_tutor:
             if message.channel == self.packs_channel and "```" in message.content:
                 # Message is a generated pack
                 await self.track_pack(message)
