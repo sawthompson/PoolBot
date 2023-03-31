@@ -92,6 +92,7 @@ class PoolBot(discord.Client):
         self.packs_channel = None
         self.pool_channel = None
         self.dev_mode = None
+        self.pools_tab_id = None
         self.pending_lfm_user_mention = None
         self.config = config
         self.league_start = datetime.fromisoformat('2022-06-22')
@@ -102,6 +103,7 @@ class PoolBot(discord.Client):
         await self.user.edit(username='AGL Bot')
         # If this is true, posts will be limited to #bot-lab and #bot-bunker, and LFM DMs will be ignored.
         self.dev_mode = self.config.debug_mode == "active"
+        self.pools_tab_id = self.config.pools_tab_id
         self.pool_channel = self.get_channel(719933932690472970) if not self.dev_mode else self.get_channel(
             1065100936445448232)
         self.packs_channel = self.get_channel(798002275452846111) if not self.dev_mode else self.get_channel(
@@ -381,7 +383,7 @@ class PoolBot(discord.Client):
                     }],
                     'fields': 'userEnteredFormat',
                     'range': {
-                        'sheetId': 639563621,
+                        'sheetId': self.pools_tab_id,
                         'startRowIndex': row - 1,
                         'endRowIndex': row,
                         'startColumnIndex': ord(col) - ord('A'),
