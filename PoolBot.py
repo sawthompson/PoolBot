@@ -173,6 +173,10 @@ class PoolBot(discord.Client):
             await self.add_pack(message, argument)
             return
 
+        if command == '!investigate' and message.channel == self.packs_channel:
+            await self.investigate(message)
+            return
+
         if command == '!randint':
             args = argv[1].split(None)
             if len(args) == 1:
@@ -195,6 +199,35 @@ class PoolBot(discord.Client):
                 f"uses that value as B and defaults A to 1. \n "
                 f"> `!help`: shows this message\n"
             )
+
+    async def investigate(self, message):
+        print("starting investigation")
+        # Get sealeddeck link and loss count from spreadsheet
+        spreadsheet_values = await self.get_spreadsheet_values('Pools!B7:Q200')
+        curr_row = 6
+        current_pool = 'Not found'
+        loss_count = 0
+        can_investigate = False
+        investigating = False
+        prev_pool = 'Not found'
+        for row in spreadsheet_values:
+            curr_row += 1
+            if len(row) < 5:
+                continue
+            if row[0].lower() != '' and row[0].lower() in message.author.display_name.lower():
+                if row[15] == 'No':
+                    message.reply(f'By my records, you cannot currently investigate. If this is in error, '
+                                  f'please post in {self.league_committee_channel.mention}')
+                    return
+
+                # Set "investigating" to true and "can investigate" to false
+                self.sheet.values().update(spreadsheetId=self.spreadsheet_id,
+                                           range=f'Pools!Q{curr_row}:R{curr_row}', valueInputOption='USER_ENTERED',
+                                           body={'values': [['No', 'Yes']]}).execute()
+
+                # Roll a new pack
+                await self.packs_channel.send(f'!cube SIRLeague {message.author.mention} searches for answers')
+                break
 
     async def track_starting_pool(self, message):
         # Handle cases where Booster Tutor fails to generate a sealeddeck.tech link
@@ -225,51 +258,83 @@ class PoolBot(discord.Client):
                 self.sheet.values().update(spreadsheetId=self.spreadsheet_id,
                                            range=f'Pools!E{curr_row}:F{curr_row}', valueInputOption='USER_ENTERED',
                                            body=body).execute()
+                self.sheet.values().update(spreadsheetId=self.spreadsheet_id,
+                                           range=f'Pools!S{curr_row}:S{curr_row}', valueInputOption='USER_ENTERED',
+                                           body={'values': [[sealed_deck_link]]}).execute()
 
                 return
         # TODO do something if the value could not be found
         return
 
     async def track_pack(self, message):
+
         # Get sealeddeck link and loss count from spreadsheet
-        spreadsheet_values = await self.get_spreadsheet_values('Pools!B7:P200')
+        spreadsheet_values = await self.get_spreadsheet_values('Pools!B7:S200')
         curr_row = 6
         current_pool = 'Not found'
         loss_count = 0
+        investigating = False
+        prev_pool = 'Not found'
         for row in spreadsheet_values:
             curr_row += 1
             if len(row) < 5:
                 continue
-            if row[0].lower() != '' and row[0].lower() in message.mentions[0].display_name.lower():
+            if row[0].lower() != '' and row[0].lower() in message.mentions[len(message.mentions) - 1].display_name.lower():
                 current_pool = row[3]
                 loss_count = int(row[2])
+                investigating = row[16] == 'Yes'
+                prev_pool = row[17]
                 break
         if current_pool == 'Not found':
+            # This should only happen during debugging / spreadsheet setup
             print("rut row")
             return
-        if current_pool == '':
-            # TODO: if no link, highlight current loss cell red
-            return
 
-        # Add pack to link
+        # SIR-SPECIFIC
+        if investigating:
+            # Set "investigating" and "can investigate"
+            self.sheet.values().update(spreadsheetId=self.spreadsheet_id,
+                                       range=f'Pools!Q{curr_row}:R{curr_row}', valueInputOption='USER_ENTERED',
+                                       body={'values': [['No', 'No']]}).execute()
+
+            current_pool = prev_pool
+        else:
+            # If this is a non-rerolled pack, store the pool without it to more easily support rerolling
+            self.sheet.values().update(spreadsheetId=self.spreadsheet_id,
+                                       range=f'Pools!S{curr_row}:S{curr_row}', valueInputOption='USER_ENTERED',
+                                       body={'values': [[current_pool]]}).execute()
+
+            # This is a new pack, so it can be investigated
+            self.sheet.values().update(spreadsheetId=self.spreadsheet_id,
+                                       range=f'Pools!Q{curr_row}:Q{curr_row}', valueInputOption='USER_ENTERED',
+                                       body={'values': [['Yes']]}).execute()
+        # END SIR-SPECIFIC (also clean up investigate references)
+
         pack_content = message.content.split("```")[1].strip()
         pack_json = arena_to_json(pack_content)
-        updated_pool_id = await pool_to_sealeddeck(
-            pack_json, current_pool.split('.tech/')[1]
-        )
-        new_pack_id = await pool_to_sealeddeck(pack_json)
+        try:
+            new_pack_id = await pool_to_sealeddeck(pack_json)
+        except:
+            # If something goes wrong with sealeddeck, highlight the pack cell red
+            await self.set_cell_to_red(curr_row, chr(ord('F') + loss_count))
+            return
 
-        # Write new pack to spreadsheet
-        pack_body = {
-            'values': [
-                [f'=HYPERLINK("https://sealeddeck.tech/{new_pack_id}", "Link")'],
-            ],
-        }
-        # Find the proper column ID
-        col = chr(ord('F') + loss_count)
-        self.sheet.values().update(spreadsheetId=self.spreadsheet_id,
-                                   range=f'Pools!{col}{curr_row}:{col}{curr_row}', valueInputOption='USER_ENTERED',
-                                   body=pack_body).execute()
+        await self.write_pack(new_pack_id, loss_count, curr_row)
+
+        if current_pool == '':
+            await self.set_cell_to_red(curr_row, chr(ord('F') + loss_count))
+            return
+
+        try:
+            # Add pack to pool link
+            updated_pool_id = await pool_to_sealeddeck(
+                pack_json, current_pool.split('.tech/')[1]
+            )
+        except:
+            print("something's wrong")
+            # If something goes wrong with sealeddeck, highlight the pack cell red
+            await self.set_cell_to_red(curr_row, chr(ord('F') + loss_count))
+            return
 
         # Write updated pool to spreadsheet
         pool_body = {
@@ -282,6 +347,51 @@ class PoolBot(discord.Client):
                                    body=pool_body).execute()
 
         return
+
+    async def write_pack(self, new_pack_id, loss_count, curr_row):
+        pack_body = {
+            'values': [
+                [f'=HYPERLINK("https://sealeddeck.tech/{new_pack_id}", "Link")'],
+            ],
+        }
+        # Find the proper column ID
+        col = chr(ord('F') + loss_count)
+        self.sheet.values().update(spreadsheetId=self.spreadsheet_id,
+                                   range=f'Pools!{col}{curr_row}:{col}{curr_row}', valueInputOption='USER_ENTERED',
+                                   body=pack_body).execute()
+
+    async def set_cell_to_red(self, row, col):
+        # Note that this request (annoyingly) uses indices instead of the regular cell format.
+        color_body = {
+            'requests': [{
+                'updateCells': {
+                    'rows': [{
+                        'values': [{
+                            'userEnteredFormat': {
+                                'backgroundColorStyle': {
+                                    'rgbColor': {
+                                        "red": 1,
+                                        "green": 0,
+                                        "blue": 0,
+                                        "alpha": 1,
+                                    }
+                                }
+                            }
+                        }]
+                    }],
+                    'fields': 'userEnteredFormat',
+                    'range': {
+                        'sheetId': 639563621,
+                        'startRowIndex': row - 1,
+                        'endRowIndex': row,
+                        'startColumnIndex': ord(col) - ord('A'),
+                        'endColumnIndex': ord(col) - ord('A') + 1,
+                    },
+                },
+            }],
+        }
+        self.sheet.batchUpdate(spreadsheetId=self.spreadsheet_id,
+                               body=color_body).execute()
 
     async def prompt_user_pick(self, message):
         # # Ensure the user doesn't already have a pending pick to make
