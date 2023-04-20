@@ -25,20 +25,6 @@ load_dotenv()
 
 SEALEDDECK_URL = "https://sealeddeck.tech/api/pools"
 
-COMPLEATION_FLAVOR_MESSAGES = [
-    'With the White Sun cresting above you a sense of hope and peace and oil washes over you. The ichor flows inside, washing away the doubt. If only all could know the embrace of the Mother.',
-    '“The Work must continue. All shall be One.“',
-    '“A Wise Choice” -Jin Gitaxias',
-    '“Welcome to the Family” -Urabrask',
-    '“Now you shall be strong enough to survive” -Vorinclex',
-    '“Fall to your knees and welcome our embrace.” - Qal-Sha, Priest of Norn',
-    '"Behold blessed perfection" - Sheoldred, Whispering One',
-    '“May you rejoice in the magnificence of Norn. May your flesh serve perfection.”',
-    '"From void evolved Phyrexia. Great Yawgmoth, Father of Machines, saw its perfection. Thus The Grand Evolution began."',
-    '“Beg me for life, and I will fill you with the glory of Phyrexian perfection”',
-]
-
-
 def arena_to_json(arena_list: str) -> Sequence[dict]:
     """Convert a list of cards in arena format to a list of json cards"""
     json_list = []
@@ -171,20 +157,12 @@ class PoolBot(discord.Client):
             await self.on_dm(message, command, argument)
             return
 
-        if command == '!becomecompleat' and message.channel == self.pool_channel:
-            await self.compleat_player(message)
-            return
-
         if command == '!playerchoice' and message.channel == self.packs_channel:
             await self.prompt_user_pick(message)
             return
 
         if command == '!addpack' and message.reference:
             await self.add_pack(message, argument)
-            return
-
-        if command == '!investigate' and message.channel == self.packs_channel:
-            await self.investigate(message)
             return
 
         if command == '!randint':
@@ -209,31 +187,6 @@ class PoolBot(discord.Client):
                 f"uses that value as B and defaults A to 1. \n "
                 f"> `!help`: shows this message\n"
             )
-
-    async def investigate(self, message):
-        # Get sealeddeck link and loss count from spreadsheet
-        spreadsheet_values = await self.get_spreadsheet_values('Pools!B7:Q200')
-        curr_row = 6
-        for row in spreadsheet_values:
-            curr_row += 1
-            if len(row) < 5:
-                continue
-            if row[0].lower() != '' and row[0].lower() in message.author.display_name.lower():
-                if row[15] == 'No':
-                    await message.reply(f'By my records, you cannot currently investigate. If this is in error, '
-                                  f'please post in {self.league_committee_channel.mention}')
-                    return
-
-                # Set "investigating" to true and "can investigate" to false
-                self.sheet.values().update(spreadsheetId=self.spreadsheet_id,
-                                           range=f'Pools!Q{curr_row}:R{curr_row}', valueInputOption='USER_ENTERED',
-                                           body={'values': [['No', 'Yes']]}).execute()
-
-                # Roll a new pack
-                await self.packs_channel.send(f'!cube SIRLeague {message.author.mention} searches for answers')
-                return
-        await message.reply(f'Hmm, I can\'t find you in the league spreadsheet. '
-                      f'Please post in {self.league_committee_channel.mention}')
 
     async def track_starting_pool(self, message):
         # Handle cases where Booster Tutor fails to generate a sealeddeck.tech link
@@ -279,7 +232,6 @@ class PoolBot(discord.Client):
         curr_row = 6
         current_pool = 'Not found'
         loss_count = 0
-        investigating = False
         prev_pool = 'Not found'
         for row in spreadsheet_values:
             curr_row += 1
@@ -295,26 +247,6 @@ class PoolBot(discord.Client):
             # This should only happen during debugging / spreadsheet setup
             print("rut row")
             return
-
-        # SIR-SPECIFIC
-        if investigating:
-            # Set "investigating" and "can investigate" to 'No'
-            self.sheet.values().update(spreadsheetId=self.spreadsheet_id,
-                                       range=f'Pools!Q{curr_row}:R{curr_row}', valueInputOption='USER_ENTERED',
-                                       body={'values': [['No', 'No']]}).execute()
-
-            current_pool = prev_pool
-        else:
-            # If this is a non-rerolled pack, store the pool without it to more easily support rerolling
-            self.sheet.values().update(spreadsheetId=self.spreadsheet_id,
-                                       range=f'Pools!S{curr_row}:S{curr_row}', valueInputOption='USER_ENTERED',
-                                       body={'values': [[current_pool]]}).execute()
-
-            # This is a new pack, so it can be investigated
-            self.sheet.values().update(spreadsheetId=self.spreadsheet_id,
-                                       range=f'Pools!Q{curr_row}:Q{curr_row}', valueInputOption='USER_ENTERED',
-                                       body={'values': [['Yes']]}).execute()
-        # END SIR-SPECIFIC (also clean up investigate references)
 
         pack_content = message.content.split("```")[1].strip()
         pack_json = arena_to_json(pack_content)
@@ -635,48 +567,6 @@ class PoolBot(discord.Client):
                 # if 'Sawyer T' in member.display_name:
                 await message_member(member)
                 print('DMed ' + member.display_name)
-
-    async def compleat_player(self, message):
-        spreadsheet_values = await self.get_spreadsheet_values('Standings!C6:H120')
-        if not spreadsheet_values:
-            return await message.reply(f'Sorry, but I cannot access the spreadsheet. '
-                                       f'Please post in {self.league_committee_channel.mention}')
-
-        loss_count = 'not found'
-        compleat = False
-        curr_row = 6
-        for row in spreadsheet_values:
-            if len(row) < 6:
-                continue
-            if row[0].lower() != '' and row[0].lower() in message.author.display_name.lower():
-                loss_count = int(row[5])
-                if row[2].lower() == 'compleated':
-                    compleat = True
-                break
-            curr_row += 1
-
-        if loss_count == 'not found':
-            return await message.reply(f'Unable to find your account in the league spreadsheet.'
-                                       f'Please post in {self.league_committee_channel.mention}')
-        if loss_count < 3:
-            return await message.reply(
-                'The machine orthodoxy has evaluated you and found you wanting, but fear not. The glory of compleation will be yours in time.')
-        if compleat == True:
-            return await message.reply(
-                "Phyrexia approves of your enthusiasm, but you have already been reshaped by Norn's will. How could you ever hope to improve upon her perfection?")
-
-        await message.reply(
-            f'!one {loss_count + 6} {message.author.mention}\n\n{random.choice(COMPLEATION_FLAVOR_MESSAGES)}')
-
-        # Update the proper cell in the spreadsheet        
-        body = {
-            'values': [
-                ['Compleated'],
-            ],
-        }
-        self.sheet.values().update(spreadsheetId=self.spreadsheet_id,
-                                   range=f'Standings!E{curr_row}:E{curr_row}', valueInputOption='USER_ENTERED',
-                                   body=body).execute()
 
     async def get_spreadsheet_values(self, range):
         creds = None
