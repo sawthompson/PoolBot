@@ -83,6 +83,7 @@ class PoolBot(discord.Client):
         self.lfm_channel = None
         self.packs_channel = None
         self.pool_channel = None
+        self.side_quest_pools_channel = None
         self.dev_mode = None
         self.pools_tab_id = None
         self.pending_lfm_user_mention = None
@@ -107,6 +108,7 @@ class PoolBot(discord.Client):
 
         self.league_committee_channel = self.get_channel(1052324453188632696) if not self.dev_mode else self.get_channel(
             1065101182525259866)
+        self.side_quest_pools_channel = self.get_channel(1055515435073806387)
         self.pending_lfm_user_mention = None
         self.active_lfm_message = None
         self.num_boosters_awaiting = 0
@@ -115,6 +117,15 @@ class PoolBot(discord.Client):
         for user in self.users:
             if user.name == 'Booster Tutor':
                 self.booster_tutor = user
+        #
+        # for member in self.guilds[0].members:
+        #     if member.bot:
+        #         continue
+        #     for role in member.roles:
+        #         if 'Lord of the Rings' in role.name:
+        #             # print(member.display_name)
+        #             await self.packs_channel.send(f'!cube Fellowship {member.mention}')
+        #             time.sleep(0.5)
 
     async def on_message_edit(self, before, after):
         # Booster tutor adds sealeddeck.tech links as part of an edit operation
@@ -135,6 +146,13 @@ class PoolBot(discord.Client):
 
         if message.author == self.booster_tutor:
             if message.channel == self.packs_channel and "```" in message.content:
+                # Message is a generated pack
+                await self.track_pack(message)
+                return
+
+        # Code here just for Johnny's decathlon side quest
+        if message.author == self.booster_tutor:
+            if message.channel == self.side_quest_pools_channel and "```" in message.content:
                 # Message is a generated pack
                 await self.track_pack(message)
                 return
@@ -244,6 +262,10 @@ class PoolBot(discord.Client):
             # This should only happen during debugging / spreadsheet setup
             print("rut row")
             return
+
+        # For LOTR league, there's a special column for fellowship packs
+        if "Fellowship" in message.content:
+            loss_count = 11
 
         pack_content = message.content.split("```")[1].strip()
         pack_json = arena_to_json(pack_content)
