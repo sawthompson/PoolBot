@@ -65,7 +65,7 @@ async def update_message(message, new_content):
 async def message_member(member):
     try:
         await member.send(
-            "Greetings, current or former Arena Gauntlet League player! We're happy to announce that we're back for our Phyrexia: All Will Be One edition of the league.\n\nThis new league brings with it a new mechanic, in which players can succumb to temptation and become 'compleat' by trading in their pool for an equivalent number of random ONE packs. Will you succumb to the glistening oil, or attempt to preserve your humanity?\n\nSign up here: https://forms.gle/3mTgRyjtN5bZUuG8A. Registration closes Wednesday February 15th.\n\nWe hope to see you there!")
+            "Greetings, current or former Arena Gauntlet League player! This is your last chance to join us for the Wilds of Eldraine league before registration closes on Wednesday, September 6th at 5pm EST.\n\nSign up here: https://docs.google.com/forms/d/e/1FAIpQLSe44aHmif2QsplYoxdyKDmrpj6hRhywdPLQD4SYhOvhvjfsGA/viewform.\n\nWe hope to see you there!")
         time.sleep(0.25)
     except discord.errors.Forbidden as e:
         print(e)
@@ -126,6 +126,7 @@ class PoolBot(discord.Client):
         #             # print(member.display_name)
         #             await self.packs_channel.send(f'!cube Fellowship {member.mention}')
         #             time.sleep(0.5)
+        # await self.message_members_not_in_league("Wilds")
 
     async def on_message_edit(self, before, after):
         # Booster tutor adds sealeddeck.tech links as part of an edit operation
@@ -146,13 +147,6 @@ class PoolBot(discord.Client):
 
         if message.author == self.booster_tutor:
             if message.channel == self.packs_channel and "```" in message.content:
-                # Message is a generated pack
-                await self.track_pack(message)
-                return
-
-        # Code here just for Johnny's decathlon side quest
-        if message.author == self.booster_tutor:
-            if message.channel == self.side_quest_pools_channel and "```" in message.content:
                 # Message is a generated pack
                 await self.track_pack(message)
                 return
@@ -584,6 +578,19 @@ class PoolBot(discord.Client):
             if member.display_name in 'put names here':
                 print('trying to DM: ' + member.display_name)
                 # if 'Sawyer T' in member.display_name:
+                await message_member(member)
+                print('DMed ' + member.display_name)
+
+    async def message_members_not_in_league(self, league_name):
+        for member in self.guilds[0].members:
+            found = False
+            if member.bot:
+                continue
+            for role in member.roles:
+                if league_name in role.name:
+                    found = True
+            if not found:
+                print('trying to DM: ' + member.display_name)
                 await message_member(member)
                 print('DMed ' + member.display_name)
 
