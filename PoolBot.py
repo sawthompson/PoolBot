@@ -62,10 +62,11 @@ async def update_message(message, new_content):
     return await message.edit(content=new_content)
 
 
-async def message_member(member):
+async def message_member(member, message):
     try:
-        await member.send(
-            "Greetings, current or former Arena Gauntlet League player! This is your last chance to join us for the Wilds of Eldraine league before registration closes on Wednesday, September 6th at 5pm EST.\n\nSign up here: https://docs.google.com/forms/d/e/1FAIpQLSe44aHmif2QsplYoxdyKDmrpj6hRhywdPLQD4SYhOvhvjfsGA/viewform.\n\nWe hope to see you there!")
+        await member.send(message)
+        # await member.send(
+        #     "Greetings, current or former Arena Gauntlet League player! This is your last chance to join us for the Wilds of Eldraine league before registration closes on Wednesday, September 6th at 5pm EST.\n\nSign up here: https://docs.google.com/forms/d/e/1FAIpQLSe44aHmif2QsplYoxdyKDmrpj6hRhywdPLQD4SYhOvhvjfsGA/viewform.\n\nWe hope to see you there!")
         time.sleep(0.25)
     except discord.errors.Forbidden as e:
         print(e)
@@ -164,6 +165,15 @@ class PoolBot(discord.Client):
             argument = argv[1]
 
         if not message.guild:
+            # For now, only allow Sawyer to send broadcasts
+            if command == '!messagetest' and 346124470940991488 == message.author.id:
+                await self.message_members_not_in_league(message.content.split(' ')[1], argument, message.author, True)
+                return
+
+            if command == '!realmessageiambeingverycareful' and 346124470940991488 == message.author.id:
+                await self.message_members_not_in_league(message.content.split(' ')[1], argument, message.author)
+                return
+
             if message.author == self.user:
                 return
             await self.on_dm(message, command, argument)
@@ -581,18 +591,25 @@ class PoolBot(discord.Client):
                 await message_member(member)
                 print('DMed ' + member.display_name)
 
-    async def message_members_not_in_league(self, league_name):
-        for member in self.guilds[0].members:
-            found = False
-            if member.bot:
-                continue
-            for role in member.roles:
-                if league_name in role.name:
-                    found = True
-            if not found:
-                print('trying to DM: ' + member.display_name)
-                await message_member(member)
-                print('DMed ' + member.display_name)
+    async def message_members_not_in_league(self, league_name, content, sender, test_mode=False):
+        count = 0
+        if test_mode:
+            await message_member(sender, content)
+            count += 1
+        else:
+            for member in self.guilds[0].members:
+                found = False
+                if member.bot:
+                    continue
+                for role in member.roles:
+                    if league_name in role.name:
+                        found = True
+                if not found:
+                    print('trying to DM: ' + member.display_name)
+                    await message_member(member, content)
+                    print('DMed ' + member.display_name)
+                    count += 1
+        await sender.send(f'Successfully DMed {count} user(s).')
 
     async def get_spreadsheet_values(self, range):
         creds = None
