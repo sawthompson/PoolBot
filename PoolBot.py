@@ -498,12 +498,12 @@ class PoolBot(discord.Client):
                 )
             await message.author.send(
                 f"I've created a post for you. You'll receive a mention when an opponent is found.\n"
-                f"If you want to cancel this, send me a message with the text `!retractLfm`."
+                f"If you want to cancel this, send me a message with the text `!nvm`."
             )
             self.pending_lfm_user_mention = message.author.mention
             return
 
-        if command == '!retractlfm':
+        if command == '!retractlfm' or command == '!nvm':
             if message.author.mention == self.pending_lfm_user_mention:
                 await self.active_lfm_message.delete()
                 self.active_lfm_message = None
@@ -520,7 +520,7 @@ class PoolBot(discord.Client):
         await message.author.send(
             f"I'm sorry, but I didn't understand that. Please send one of the following commands:\n"
             f"> `!lfm`: creates an anonymous post looking for a match.\n"
-            f"> `!retractLfm`: removes an anonymous LFM that you've sent out."
+            f"> `!nvm`: removes an anonymous LFM that you've sent out."
             f"> `!choosePackA`: responds to a pending pack selection option."
             f"> `!choosePackB`: responds to a pending pack selection option."
         )
