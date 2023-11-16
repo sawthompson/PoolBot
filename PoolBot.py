@@ -255,7 +255,7 @@ class PoolBot(discord.Client):
                 continue
             if row[0].lower() != '' and row[0].lower() in message.author.display_name.lower():
                 if int(row[16]) <= 0:
-                    await message.reply(f'By my records, you cannot currently explore. If this is in error, '
+                    await message.reply(f'By my records, you do not have any unused maps. If this is in error, '
                                         f'please post in {self.league_committee_channel.mention}')
                     return
 
