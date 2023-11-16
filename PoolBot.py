@@ -187,6 +187,10 @@ class PoolBot(discord.Client):
             await self.add_pack(message, argument)
             return
 
+        if command == '!explore' and message.channel == self.packs_channel:
+            await self.explore(message)
+            return
+
         if command == '!randint':
             args = argv[1].split(None)
             if len(args) == 1:
@@ -209,6 +213,63 @@ class PoolBot(discord.Client):
                 f"uses that value as B and defaults A to 1. \n "
                 f"> `!help`: shows this message\n"
             )
+
+    async def explore(self, message):
+        possible_sets = [
+            "SIR",
+            "AKR",
+            "KLR",
+            "WOE",
+            "MOM",
+            "ONE",
+            "BRO",
+            "DMU",
+            "SNC",
+            "NEO",
+            "VOW",
+            "MID",
+            "AFR",
+            "STX",
+            "KHM",
+            "ZNR",
+            "M21",
+            "IKO",
+            "THB",
+            "ELD",
+            "M20",
+            "WAR",
+            "RNA",
+            "GRN",
+            "M19",
+            "DOM",
+            "RIX",
+            "XLN",
+        ]
+        set_to_generate = random.choice(possible_sets)
+        # Get sealeddeck link and loss count from spreadsheet
+        spreadsheet_values = await self.get_spreadsheet_values('Pools!B7:R200')
+        curr_row = 6
+        for row in spreadsheet_values:
+            curr_row += 1
+            if len(row) < 5:
+                continue
+            if row[0].lower() != '' and row[0].lower() in message.author.display_name.lower():
+                if int(row[16]) <= 0:
+                    await message.reply(f'By my records, you cannot currently explore. If this is in error, '
+                                        f'please post in {self.league_committee_channel.mention}')
+                    return
+
+                # Mark the map as used
+                self.sheet.values().update(spreadsheetId=self.spreadsheet_id,
+                                           range=f'Pools!Q{curr_row}:Q{curr_row}', valueInputOption='USER_ENTERED',
+                                           body={'values': [[int(row[15]) + 1]]}).execute()
+
+                # Roll a new pack
+                await self.packs_channel.send(
+                    f'!{set_to_generate} {message.author.mention} follows a map to uncharted territory')
+                return
+        await message.reply(f'Hmm, I can\'t find you in the league spreadsheet. '
+                            f'Please post in {self.league_committee_channel.mention}')
 
     async def track_starting_pool(self, message):
         # Handle cases where Booster Tutor fails to generate a sealeddeck.tech link
