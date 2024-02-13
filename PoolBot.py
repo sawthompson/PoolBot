@@ -449,14 +449,14 @@ class PoolBot(discord.Client):
         if self.num_boosters_awaiting == 2:
             self.num_boosters_awaiting -= 1
             await self.packs_channel.send(
-                f'Pack Option A (Urza) for {self.awaiting_boosters_for_user.mention}. To select this pack, DM me '
-                f'`!chooseUrza`\n '
+                f'Pack Option A for {self.awaiting_boosters_for_user.mention}. To select this pack, DM me '
+                f'`!choosePackA`\n '
                 f'```{message.content.split("```")[1].strip()}```')
         else:
             self.num_boosters_awaiting -= 1
             await self.packs_channel.send(
-                f'Pack Option B (Mishra) for {self.awaiting_boosters_for_user.mention}. To select this pack, DM me '
-                f'`!chooseMishra`\n '
+                f'Pack Option B for {self.awaiting_boosters_for_user.mention}. To select this pack, DM me '
+                f'`!choosePackB`\n '
                 f'```{message.content.split("```")[1].strip()}```')
         if self.num_boosters_awaiting == 0:
             self.awaiting_boosters_for_user = None
@@ -484,12 +484,12 @@ class PoolBot(discord.Client):
     async def choose_pack(self, user: Union[discord.Member, discord.User], chosen_option: str):
         if chosen_option == 'A':
             not_chosen_option = 'B'
-            split = '!chooseUrza`'
-            not_chosen_split = '!chooseMishra`'
+            split = '!choosePackA`'
+            not_chosen_split = '!choosePackB`'
         else:
             not_chosen_option = 'A'
-            split = '!chooseMishra`'
-            not_chosen_split = '!chooseUrza`'
+            split = '!choosePackB`'
+            not_chosen_split = '!choosePackA`'
         chosen_message = None
         async for message in self.packs_channel.history(limit=500):
             if (message.author.name == 'AGL Bot' and message.mentions and message.mentions[0] == user
