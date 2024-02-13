@@ -57,7 +57,7 @@ async def pool_to_sealeddeck(
     return resp_json["poolId"]
 
 
-async def update_message(message, new_content):
+async def update_message(message: discord.Message, new_content: str):
     """Updates the text contents of a sent bot message"""
     return await message.edit(content=new_content)
 
@@ -214,7 +214,7 @@ class PoolBot(discord.Client):
                 f"> `!help`: shows this message\n"
             )
 
-    async def explore(self, message):
+    async def explore(self, message: discord.Message):
         possible_sets = [
             "SIR",
             "AKR",
@@ -371,7 +371,7 @@ class PoolBot(discord.Client):
 
         return
 
-    async def write_pack(self, new_pack_id, loss_count, curr_row):
+    async def write_pack(self, new_pack_id: str, loss_count: int, curr_row: int):
         pack_body = {
             'values': [
                 [f'=HYPERLINK("https://sealeddeck.tech/{new_pack_id}", "Link")'],
