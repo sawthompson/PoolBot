@@ -62,7 +62,7 @@ async def update_message(message, new_content):
     return await message.edit(content=new_content)
 
 
-async def message_member(member, message):
+async def message_member(member: Union[discord.Member, discord.User], message: str):
     try:
         await member.send(message)
         # await member.send(
@@ -129,7 +129,7 @@ class PoolBot(discord.Client):
         #             time.sleep(0.5)
         # await self.message_members_not_in_league("Wilds")
 
-    async def on_message_edit(self, before, after):
+    async def on_message_edit(self, before: discord.Message, after: discord.Message):
         # Booster tutor adds sealeddeck.tech links as part of an edit operation
         if before.author == self.booster_tutor:
             if before.channel == self.pool_channel and "Sealeddeck.tech link" not in before.content and\
@@ -138,7 +138,7 @@ class PoolBot(discord.Client):
                 await self.track_starting_pool(after)
                 return
 
-    async def on_message(self, message):
+    async def on_message(self, message: discord.Message):
         # As part of the !playerchoice flow, repost Booster Tutor packs in pack-generation with instructions for
         # the appropriate user to select their pack.
         if (message.channel == self.bot_bunker_channel and message.author == self.booster_tutor
@@ -271,7 +271,7 @@ class PoolBot(discord.Client):
         await message.reply(f'Hmm, I can\'t find you in the league spreadsheet. '
                             f'Please post in {self.league_committee_channel.mention}')
 
-    async def track_starting_pool(self, message):
+    async def track_starting_pool(self, message: discord.Message):
         # Handle cases where Booster Tutor fails to generate a sealeddeck.tech link
         if '**Sealeddeck.tech:** Error' in message.content:
             # TODO: highlight the pool cell red and DM someone if this happens
@@ -308,7 +308,7 @@ class PoolBot(discord.Client):
         # TODO do something if the value could not be found
         return
 
-    async def track_pack(self, message):
+    async def track_pack(self, message: discord.Message):
 
         # Get sealeddeck link and loss count from spreadsheet
         spreadsheet_values = await self.get_spreadsheet_values('Pools!B7:S200')
@@ -383,7 +383,7 @@ class PoolBot(discord.Client):
                                    range=f'Pools!{col}{curr_row}:{col}{curr_row}', valueInputOption='USER_ENTERED',
                                    body=pack_body).execute()
 
-    async def set_cell_to_red(self, row, col):
+    async def set_cell_to_red(self, row: int, col: str):
         # Note that this request (annoyingly) uses indices instead of the regular cell format.
         color_body = {
             'requests': [{
@@ -416,7 +416,7 @@ class PoolBot(discord.Client):
         self.sheet.batchUpdate(spreadsheetId=self.spreadsheet_id,
                                body=color_body).execute()
 
-    async def prompt_user_pick(self, message):
+    async def prompt_user_pick(self, message: discord.Message):
         # # Ensure the user doesn't already have a pending pick to make
         # pendingPickMessage = await self.packs_channel.history().find(
         # 	lambda m : m.author.name == 'AGL Bot'
@@ -444,7 +444,7 @@ class PoolBot(discord.Client):
         await self.bot_bunker_channel.send(booster_one_type)
         await self.bot_bunker_channel.send(booster_two_type)
 
-    async def handle_booster_tutor_response(self, message):
+    async def handle_booster_tutor_response(self, message: discord.Message):
         assert self.num_boosters_awaiting > 0
         if self.num_boosters_awaiting == 2:
             self.num_boosters_awaiting -= 1
@@ -461,7 +461,7 @@ class PoolBot(discord.Client):
         if self.num_boosters_awaiting == 0:
             self.awaiting_boosters_for_user = None
 
-    async def issue_challenge(self, message):
+    async def issue_challenge(self, message: discord.Message):
         if not self.pending_lfm_user_mention:
             await self.lfm_channel.send(
                 "Sorry, but no one is looking for a match right now. You can send out an anonymous LFM by DMing me "
@@ -481,7 +481,7 @@ class PoolBot(discord.Client):
         self.pending_lfm_user_mention = None
         self.active_lfm_message = None
 
-    async def choose_pack(self, user, chosen_option):
+    async def choose_pack(self, user: Union[discord.Member, discord.User], chosen_option: str):
         if chosen_option == 'A':
             not_chosen_option = 'B'
             split = '!chooseUrza`'
@@ -529,7 +529,7 @@ class PoolBot(discord.Client):
 
         return
 
-    async def on_dm(self, message, command, argument):
+    async def on_dm(self, message: discord.Message, command: str, argument: str):
         if command == '!choosepacka' or command == '!chooseurza':
             await self.choose_pack(message.author, 'A')
             return
@@ -586,7 +586,7 @@ class PoolBot(discord.Client):
             f"> `!choosePackB`: responds to a pending pack selection option."
         )
 
-    async def add_pack(self, message, argument):
+    async def add_pack(self, message: discord.Message, argument: str):
         if message.channel != self.packs_channel:
             return
 
@@ -633,7 +633,7 @@ class PoolBot(discord.Client):
             )
         await m.edit(content=content)
 
-    async def print_members_not_in_league(self, league_name):
+    async def print_members_not_in_league(self, league_name: str):
         for member in self.guilds[0].members:
             found = False
             if member.bot:
@@ -652,7 +652,7 @@ class PoolBot(discord.Client):
                 await message_member(member)
                 print('DMed ' + member.display_name)
 
-    async def message_members_not_in_league(self, league_name, content, sender, test_mode=False):
+    async def message_members_not_in_league(self, league_name: str, content: str, sender: Union[discord.Member, discord.User], test_mode=False):
         count = 0
         if test_mode:
             await message_member(sender, content)
@@ -672,7 +672,7 @@ class PoolBot(discord.Client):
                     count += 1
         await sender.send(f'Successfully DMed {count} user(s).')
 
-    async def get_spreadsheet_values(self, range):
+    async def get_spreadsheet_values(self, range: str):
         creds = None
         # The file token.json stores the user's access and refresh tokens, and is
         # created automatically when the authorization flow completes for the first
