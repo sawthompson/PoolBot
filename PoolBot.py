@@ -191,6 +191,9 @@ class PoolBot(discord.Client):
             await self.explore(message)
             return
 
+        if command == '!collect' and message.channel == self.packs_channel:
+            await self.collect_evidence(message, argument)
+
         if command == '!randint':
             args = argv[1].split(None)
             if len(args) == 1:
@@ -213,6 +216,76 @@ class PoolBot(discord.Client):
                 f"uses that value as B and defaults A to 1. \n "
                 f"> `!help`: shows this message\n"
             )
+
+    async def collect(self, message: discord.Message, argument: str):
+        allowed_sets = ["mkm", "lci", "woe", "mom", "one", "bro"]
+        try:
+            args = argument.split(' ')
+            clues_to_spend = int(args[0])
+            sets = args[1:]
+        except ValueError:
+            await message.reply("Hmm, I don't understand that. Try `!collect 2`, `!collect 4 SET`, `!collect 6 SET SET`, or `!collect 10 SET SET`. (SET can be mkm, lci, woe, mom, one, or bro. You can choose the same set twice.)")
+            return
+        if clues_to_spend not in [2,4,6,10]:
+            await message.reply("You can only use 2, 4, 6, or 10 clues when collecting evidence.")
+            return
+        if clues_to_spend == 2 and (len(sets) != 1 or sets[0].lower() not in allowed_sets):
+            await message.reply("Hmm, I don't understand that. Try `!collect 2`, `!collect 4 SET`, `!collect 6 SET SET`, or `!collect 10 SET SET`. (SET can be mkm, lci, woe, mom, one, or bro. You can choose the same set twice.)")
+            return
+        if clues_to_spend in [4, 6, 10] and (len(sets) != 2 or sets[0].lower() not in allowed_sets or sets[1].lower() not in allowed_sets):
+            await message.reply("Hmm, I don't understand that. Try `!collect 2`, `!collect 4 SET`, `!collect 6 SET SET`, or `!collect 10 SET SET`. (SET can be mkm, lci, woe, mom, one, or bro. You can choose the same set twice.)")
+            return
+
+        sets = [s.lower() if s.lower() != "mkm" else "a-mkm" for s in sets]
+
+        last_6 = "!from a-mkm|lci|woe|mom|one|bro"
+
+        # Get sealeddeck link and loss count from spreadsheet
+        spreadsheet_values = await self.get_spreadsheet_values('Pools!B7:AA200')
+        curr_row = 6
+        for row in spreadsheet_values:
+            curr_row += 1
+            if len(row) < 5:
+                continue
+            if row[0].lower() != '' and row[0].lower() in message.author.display_name.lower():
+                clues = clues_available(row)
+                if clues_available(row) < clues_to_spend:
+                    await message.reply(f'By my records, you do not have enough clues. If this is in error, '
+                                        f'please post in {self.league_committee_channel.mention}')
+                    return
+
+                # Mark the clues as used
+                self.sheet.values().update(spreadsheetId=self.spreadsheet_id,
+                                           range=f'Pools!Q{curr_row}:Q{curr_row}', valueInputOption='USER_ENTERED',
+                                           body={'values': [[int(row[15]) + clues_to_spend]]}).execute()
+
+                if clues_to_spend == 2:
+                    await self.packs_channel.send(f"{last_6} {message.author.mention}")
+                    # TODO MKM replace pack???
+                elif clues_to_spend == 4:
+                    await self.packs_channel.send(f"!from {'|'.join(sets)} {message.author.mention}")
+                    # TODO MKM replace pack???
+                elif clues_to_spend == 6:
+                    # ripped from prompt_user_pick
+                    while self.awaiting_boosters_for_user is not None:
+                        time.sleep(3)
+
+                    booster_one_type = f"!{sets[0]}" # TODO MKM is this right?
+                    booster_two_type = f"!{sets[1]}" # TODO MKM is this right?
+                    self.num_boosters_awaiting = 2
+                    self.awaiting_boosters_for_user = message.mentions[0]
+
+                    # Generate two packs of the specified types
+                    await self.bot_bunker_channel.send(booster_one_type)
+                    await self.bot_bunker_channel.send(booster_two_type)
+                    # TODO MKM replace pack??? (in choose_pack)
+                elif clues_to_spend == 10:
+                    await self.packs_channel.send(f"!{sets[0]} {message.author.mention}")
+                    await self.packs_channel.send(f"!{sets[1]} {message.author.mention}")
+                    # TODO MKM replace pack with both???
+                return
+        await message.reply(f'Hmm, I can\'t find you in the league spreadsheet. '
+                            f'Please post in {self.league_committee_channel.mention}')
 
     async def explore(self, message: discord.Message):
         possible_sets = [
@@ -746,3 +819,7 @@ class PoolBot(discord.Client):
         except HttpError as err:
             print(err)
         return []
+
+def clues_available(row: Sequence[str]):
+    # TODO MKM interpret from row (probably also need entire other sheet)
+    return 0
