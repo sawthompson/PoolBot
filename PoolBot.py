@@ -241,7 +241,7 @@ class PoolBot(discord.Client):
         last_6 = "!from a-mkm|lci|woe|mom|one|bro"
 
         # Get sealeddeck link and loss count from spreadsheet
-        spreadsheet_values = await self.get_spreadsheet_values('Pools!B7:AA200')
+        spreadsheet_values = await self.get_spreadsheet_values('Pools!B7:AB200')
         curr_row = 6
         for row in spreadsheet_values:
             curr_row += 1
@@ -388,7 +388,7 @@ class PoolBot(discord.Client):
     async def track_pack(self, message: discord.Message):
 
         # Get sealeddeck link and loss count from spreadsheet
-        spreadsheet_values = await self.get_spreadsheet_values('Pools!B7:AA200')
+        spreadsheet_values = await self.get_spreadsheet_values('Pools!B7:AB200')
         curr_row = 6
         current_pool = 'Not found'
         current_pack_only_pool = None
