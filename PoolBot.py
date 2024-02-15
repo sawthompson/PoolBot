@@ -663,12 +663,12 @@ class PoolBot(discord.Client):
                 return
             if not argument:
                 self.active_lfm_message = await self.lfm_channel.send(
-                    "An anonymous player is looking for a match. Post `!challenge` to reveal their identity and "
+                    "A mysterious creature is looking for a match. Post `!challenge` to reveal their identity and "
                     "initiate a match. "
                 )
             else:
                 self.active_lfm_message = await self.lfm_channel.send(
-                    f"An anonymous player is looking for a match. Post `!challenge` to reveal their identity and "
+                    f"A mysterious creature is looking for a match. Post `!challenge` to reveal their identity and "
                     f"initiate a match.\n "
                     f"Message from the player:\n"
                     f"> {argument}"
