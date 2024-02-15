@@ -303,6 +303,10 @@ class PoolBot(discord.Client):
                 self.sheet.values().update(spreadsheetId=self.spreadsheet_id,
                                            range=f'Pools!S{curr_row}:S{curr_row}', valueInputOption='USER_ENTERED',
                                            body={'values': [[sealed_deck_link]]}).execute()
+                # Add to Current Pack Only column
+                self.sheet.values().update(spreadsheetId=self.spreadsheet_id,
+                                           range=f'Pools!AA{curr_row}:AA{curr_row}', valueInputOption='USER_ENTERED',
+                                           body={'values': [[sealed_deck_link]]}).execute()
 
                 return
         # TODO do something if the value could not be found
@@ -311,9 +315,11 @@ class PoolBot(discord.Client):
     async def track_pack(self, message: discord.Message):
 
         # Get sealeddeck link and loss count from spreadsheet
-        spreadsheet_values = await self.get_spreadsheet_values('Pools!B7:S200')
+        spreadsheet_values = await self.get_spreadsheet_values('Pools!B7:AA200')
         curr_row = 6
         current_pool = 'Not found'
+        current_pack_only_pool = None
+        extra_cards = []
         loss_count = 0
         for row in spreadsheet_values:
             curr_row += 1
@@ -321,6 +327,8 @@ class PoolBot(discord.Client):
                 continue
             if row[0].lower() != '' and row[0].lower() in message.mentions[len(message.mentions) - 1].display_name.lower():
                 current_pool = row[3]
+                current_pack_only_pool = row[ord('Z') - ord('B') + 1]
+                extra_cards = [{"name": card, "count": 1} for card in row[(ord('T') - ord('B')):(ord('Z')-ord('B'))] if card != '']
                 loss_count = int(row[2])
                 break
         if current_pool == 'Not found':
@@ -348,10 +356,13 @@ class PoolBot(discord.Client):
             await self.set_cell_to_red(curr_row, chr(ord('F') + loss_count))
             return
 
+        if current_pack_only_pool == '':
+            current_pack_only_pool = current_pool
+
         try:
             # Add pack to pool link
             updated_pool_id = await pool_to_sealeddeck(
-                pack_json, current_pool.split('.tech/')[1]
+                pack_json, current_pack_only_pool.split('.tech/')[1]
             )
         except:
             print("sealeddeck issue — updating pool")
@@ -359,7 +370,39 @@ class PoolBot(discord.Client):
             await self.set_cell_to_red(curr_row, chr(ord('F') + loss_count))
             return
 
-        # Write updated pool to spreadsheet
+        # Move current pack-only pool to previous, to allow rebuilding on reroll
+        previous_pool_body = {
+            'values': [
+                [current_pack_only_pool]
+            ]
+        }
+        self.sheet.values().update(spreadsheetId=self.spreadsheet_id,
+                                   range=f'Pools!Z{curr_row}:Z{curr_row}, valueInputOption='USER_ENTERED',
+                                   body=previous_pool_body).execute()
+
+        # Write updated pack-only pool to spreadsheet
+        pool_body = {
+            'values': [
+                [f'https://sealeddeck.tech/{updated_pool_id}'],
+            ],
+        }
+        self.sheet.values().update(spreadsheetId=self.spreadsheet_id,
+                                   range=f'Pools!AA{curr_row}:AA{curr_row}', valueInputOption='USER_ENTERED',
+                                   body=pool_body).execute()
+
+        if len(extra_cards) > 0:
+            try:
+                # Add extra cards
+                updated_pool_id = await pool_to_sealeddeck(
+                    extra_cards, updated_pool_id
+                )
+            except:
+                print("sealeddeck issue — updating pool")
+                # If something goes wrong with sealeddeck, highlight the pack cell red
+                await self.set_cell_to_red(curr_row, chr(ord('F') + loss_count))
+                return
+
+        # Write updated extra-card-included pool to spreadsheet
         pool_body = {
             'values': [
                 [f'https://sealeddeck.tech/{updated_pool_id}'],
