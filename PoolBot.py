@@ -277,7 +277,7 @@ class PoolBot(discord.Client):
         last_6 = "!from a-mkm|lci|woe|mom|one|bro"
 
         # Get sealeddeck link and loss count from spreadsheet
-        spreadsheet_values = await self.get_spreadsheet_values('Pools!B7:Z200')
+        spreadsheet_values = await self.get_spreadsheet_values('Pools!B7:AA200')
         curr_row = 6
         for row in spreadsheet_values:
             curr_row += 1
@@ -298,7 +298,7 @@ class PoolBot(discord.Client):
 
                 # Mark the clues as used
                 self.sheet.values().update(spreadsheetId=self.spreadsheet_id,
-                                           range=f'Pools!Q{curr_row}:Q{curr_row}', valueInputOption='USER_ENTERED',
+                                           range=f'Pools!R{curr_row}:R{curr_row}', valueInputOption='USER_ENTERED',
                                            body={'values': [[int(row[16]) + clues_to_spend]]}).execute()
 
                 if clues_to_spend == 2:
@@ -310,10 +310,10 @@ class PoolBot(discord.Client):
                     while self.awaiting_boosters_for_user is not None:
                         time.sleep(3)
 
-                    booster_one_type = f"!{sets[0]}" # TODO MKM is this right?
-                    booster_two_type = f"!{sets[1]}" # TODO MKM is this right?
+                    booster_one_type = f"!{sets[0]}"
+                    booster_two_type = f"!{sets[1]}"
                     self.num_boosters_awaiting = 2
-                    self.awaiting_boosters_for_user = message.mentions[0]
+                    self.awaiting_boosters_for_user = message.author
 
                     # Generate two packs of the specified types
                     await self.bot_bunker_channel.send(booster_one_type)
@@ -416,10 +416,6 @@ class PoolBot(discord.Client):
                 self.sheet.values().update(spreadsheetId=self.spreadsheet_id,
                                            range=f'Pools!S{curr_row}:S{curr_row}', valueInputOption='USER_ENTERED',
                                            body={'values': [[sealed_deck_link]]}).execute()
-                # Add to Current Pack Only column
-                self.sheet.values().update(spreadsheetId=self.spreadsheet_id,
-                                           range=f'Pools!AA{curr_row}:AA{curr_row}', valueInputOption='USER_ENTERED',
-                                           body={'values': [[sealed_deck_link]]}).execute()
 
                 return
         # TODO do something if the value could not be found
@@ -432,14 +428,15 @@ class PoolBot(discord.Client):
         """
 
         # Get sealeddeck link and loss count from spreadsheet
-        spreadsheet_values = await self.get_spreadsheet_values('Pools!B7:Z200')
+        spreadsheet_values = await self.get_spreadsheet_values('Pools!B7:AA200')
+        spreadsheet_formulas = await self.get_spreadsheet_values('Pools!B7:AA200', valueRenderOption="FORMULA")
         curr_row = 6
         current_pool = 'Not found'
         extra_cards = []
         extra_card_count = 0
         loss_count = 0
         pack_to_replace = None
-        for row in spreadsheet_values:
+        for (row, formulas) in zip(spreadsheet_values, spreadsheet_formulas):
             curr_row += 1
             if len(row) < 5:
                 continue
@@ -450,7 +447,8 @@ class PoolBot(discord.Client):
                 # Column AA has extra card count
                 extra_card_count = int(row[ord('Z')-ord('B')+1])
                 loss_count = int(row[2])
-                pack_to_replace = row[ord('F') - ord('B') + loss_count]
+                replace_id_match = re.search("\\.tech/(?P<id>[a-zA-Z0-9]*)", formulas[ord('F') - ord('B') + loss_count])
+                pack_to_replace = replace_id_match and replace_id_match.group("id")
                 break
         if current_pool == 'Not found':
             # This should only happen during debugging / spreadsheet setup
@@ -468,7 +466,7 @@ class PoolBot(discord.Client):
         if message.mentions[-1].id in self.double_packs:
             double_pack = self.double_packs[message.mentions[-1].id]
             if len(double_pack) == 0:
-                double_pack.push(pack_json)
+                double_pack.append(pack_json)
                 return
             else:
                 pack_json = [*double_pack[0], *pack_json]
@@ -489,14 +487,14 @@ class PoolBot(discord.Client):
             return
 
         try:
-            if pack_to_replace is None:
+            if not pack_to_replace:
                 # Add pack to pool link
                 updated_pool_id = await pool_to_sealeddeck(
                     pack_json, current_pool.split('.tech/')[1]
                 )
             else:
                 pool_contents = await sealeddeck_pool(current_pool.split('.tech/')[1])
-                cards_to_replace = await sealeddeck_pool(pack_to_replace.split('.tech/')[1])
+                cards_to_replace = await sealeddeck_pool(pack_to_replace)
                 pool_without_old_cards = remove_cards(pool_contents, cards_to_replace)
                  # TODO MKM verify that they can just be concatenated not added
                 updated_pool_id = await pool_to_sealeddeck([*pool_without_old_cards, *pack_json])
@@ -528,9 +526,10 @@ class PoolBot(discord.Client):
         self.sheet.values().update(spreadsheetId=self.spreadsheet_id,
                                    range=f'Pools!E{curr_row}:E{curr_row}', valueInputOption='USER_ENTERED',
                                    body=pool_body).execute()
-        self.sheet.values().update(spreadsheetId=self.spreadsheet_id,
-                                   range=f'Pools!Z{curr_row}:Z{curr_row}', valueInputOption='USER_ENTERED',
-                                   body={'values': [[len(extra_cards)]]})
+        if len(extra_cards) > extra_card_count:
+            self.sheet.values().update(spreadsheetId=self.spreadsheet_id,
+                                       range=f'Pools!AA{curr_row}:AA{curr_row}', valueInputOption='USER_ENTERED',
+                                       body={'values': [[len(extra_cards)]]}).execute()
 
         return
 
@@ -830,7 +829,7 @@ class PoolBot(discord.Client):
                     count += 1
         await sender.send(f'Successfully DMed {count} user(s).')
 
-    async def get_spreadsheet_values(self, range: str):
+    async def get_spreadsheet_values(self, range: str, valueRenderOption="FORMATTED_VALUE"):
         creds = None
         # The file token.json stores the user's access and refresh tokens, and is
         # created automatically when the authorization flow completes for the first
@@ -856,7 +855,8 @@ class PoolBot(discord.Client):
             # Call the Sheets API
             self.sheet = service.spreadsheets()
             result = self.sheet.values().get(spreadsheetId=self.spreadsheet_id,
-                                             range=range).execute()
+                                             range=range,
+                                             valueRenderOption=valueRenderOption).execute()
             return result.get('values', [])
         except HttpError as err:
             print(err)
