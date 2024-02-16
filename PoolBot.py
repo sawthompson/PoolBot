@@ -7,8 +7,9 @@ import re
 import random
 import time
 from dotenv import load_dotenv
-from typing import Optional, Sequence, Union
+from typing import Optional, Sequence, Union, List, TypedDict
 from datetime import datetime
+from collections import Counter
 
 import os.path
 
@@ -25,18 +26,49 @@ load_dotenv()
 
 SEALEDDECK_URL = "https://sealeddeck.tech/api/pools"
 
-def arena_to_json(arena_list: str) -> Sequence[dict]:
+class SealedDeckEntry(TypedDict):
+    name: str
+    count: int
+
+def arena_to_json(arena_list: str) -> Sequence[SealedDeckEntry]:
     """Convert a list of cards in arena format to a list of json cards"""
-    json_list = []
+    json_list: List[SealedDeckEntry] = []
     for line in arena_list.rstrip("\n ").split("\n"):
         count, card = line.split(" ", 1)
         card_name = card.split(" (")[0]
         json_list.append({"name": f"{card_name}", "count": int(count)})
     return json_list
 
+def remove_cards(pool: Sequence[SealedDeckEntry], cards_to_remove: Sequence[SealedDeckEntry]) -> Sequence[SealedDeckEntry]:
+    """Remove the given cards from the pool, decrementing counts or totally removing entries."""
+    counted: Counter[str] = Counter()
+    for card in pool:
+        counted[card["name"]] += card["count"]
+    for card in cards_to_remove:
+        counted[card["name"]] -= card["count"]
+    return [{"name": name, "count": count} for name, count in counted.items() if count > 0]
+
+async def sealeddeck_pool(pool_sealeddeck_id: str) -> Optional[Sequence[SealedDeckEntry]]:
+    resp_json = None
+
+    for attempt in range(3):
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(f"{SEALEDDECK_URL}/{pool_sealeddeck_id}") as resp:
+                    resp.raise_for_status()
+                    resp_json = await resp.json()
+        except:
+            continue
+        else:
+            break
+
+    if resp_json is not None:
+        return [*resp_json["sideboard"], *resp_json["deck"], *resp_json["hidden"]]
+    else:
+        return None
 
 async def pool_to_sealeddeck(
-        punishment_cards: Sequence[dict], pool_sealeddeck_id: Optional[str] = None
+        punishment_cards: Sequence[SealedDeckEntry], pool_sealeddeck_id: Optional[str] = None
 ) -> str:
     """Adds punishment cards to a sealeddeck.tech pool and returns the id"""
     deck: dict[str, Union[Sequence[dict], str]] = {"sideboard": punishment_cards}
@@ -57,12 +89,12 @@ async def pool_to_sealeddeck(
     return resp_json["poolId"]
 
 
-async def update_message(message, new_content):
+async def update_message(message: discord.Message, new_content: str):
     """Updates the text contents of a sent bot message"""
     return await message.edit(content=new_content)
 
 
-async def message_member(member, message):
+async def message_member(member: Union[discord.Member, discord.User], message: str):
     try:
         await member.send(message)
         # await member.send(
@@ -90,6 +122,7 @@ class PoolBot(discord.Client):
         self.pending_lfm_user_mention = None
         self.config = config
         self.league_start = datetime.fromisoformat('2022-06-22')
+        self.double_packs: dict[int, Sequence[SealedDeckEntry]] = dict()
         super().__init__(intents=intents, *args, **kwargs)
 
     async def on_ready(self):
@@ -129,7 +162,7 @@ class PoolBot(discord.Client):
         #             time.sleep(0.5)
         # await self.message_members_not_in_league("Wilds")
 
-    async def on_message_edit(self, before, after):
+    async def on_message_edit(self, before: discord.Message, after: discord.Message):
         # Booster tutor adds sealeddeck.tech links as part of an edit operation
         if before.author == self.booster_tutor:
             if before.channel == self.pool_channel and "Sealeddeck.tech link" not in before.content and\
@@ -138,7 +171,7 @@ class PoolBot(discord.Client):
                 await self.track_starting_pool(after)
                 return
 
-    async def on_message(self, message):
+    async def on_message(self, message: discord.Message):
         # As part of the !playerchoice flow, repost Booster Tutor packs in pack-generation with instructions for
         # the appropriate user to select their pack.
         if (message.channel == self.bot_bunker_channel and message.author == self.booster_tutor
@@ -191,6 +224,9 @@ class PoolBot(discord.Client):
             await self.explore(message)
             return
 
+        if command == '!collect' and message.channel == self.packs_channel:
+            await self.collect(message, argument)
+
         if command == '!randint':
             args = argv[1].split(None)
             if len(args) == 1:
@@ -214,7 +250,84 @@ class PoolBot(discord.Client):
                 f"> `!help`: shows this message\n"
             )
 
-    async def explore(self, message):
+    async def collect(self, message: discord.Message, argument: str):
+        allowed_sets = ["mkm", "lci", "woe", "mom", "one", "bro"]
+        try:
+            args = argument.split(' ')
+            clues_to_spend = int(args[0])
+            sets = args[1:]
+        except ValueError:
+            await message.reply("Hmm, I don't understand that. Try `!collect 2`, `!collect 4 SET`, `!collect 6 SET SET`, or `!collect 10 SET SET`. (SET can be `mkm`, `lci`, `woe`, `mom`, `one`, or `bro`. You can choose the same set twice.)")
+            return
+        if clues_to_spend not in [2,4,6,10]:
+            await message.reply("You can only use 2, 4, 6, or 10 clues when collecting evidence.")
+            return
+        if clues_to_spend == 2 and len(sets) != 0:
+            await message.reply("Hmm, I don't understand that. Try `!collect 2`, `!collect 4 SET`, `!collect 6 SET SET`, or `!collect 10 SET SET`. (SET can be `mkm`, `lci`, `woe`, `mom`, `one`, or `bro`. You can choose the same set twice.)")
+            return
+        if clues_to_spend == 4 and (len(sets) != 1 or sets[0].lower() not in allowed_sets):
+            await message.reply("Hmm, I don't understand that. Try `!collect 2`, `!collect 4 SET`, `!collect 6 SET SET`, or `!collect 10 SET SET`. (SET can be `mkm`, `lci`, `woe`, `mom`, `one`, or `bro`. You can choose the same set twice.)")
+            return
+        if clues_to_spend in [6, 10] and (len(sets) != 2 or sets[0].lower() not in allowed_sets or sets[1].lower() not in allowed_sets):
+            await message.reply("Hmm, I don't understand that. Try `!collect 2`, `!collect 4 SET`, `!collect 6 SET SET`, or `!collect 10 SET SET`. (SET can be `mkm`, `lci`, `woe`, `mom`, `one`, or `bro`. You can choose the same set twice.)")
+            return
+
+        sets = [s.lower() if s.lower() != "mkm" else "a-mkm" for s in sets]
+
+        last_6 = "!from a-mkm|lci|woe|mom|one|bro"
+
+        # Get sealeddeck link and loss count from spreadsheet
+        spreadsheet_values = await self.get_spreadsheet_values('Pools!B7:AA200')
+        curr_row = 6
+        for row in spreadsheet_values:
+            curr_row += 1
+            if len(row) < 5:
+                continue
+            if row[0].lower() != '' and row[0].lower() in message.author.display_name.lower():
+                losses = int(row[2])
+                clues_available = int(row[15])
+                if clues_available < clues_to_spend:
+                    await message.reply(f'By my records, you do not have enough clues. If this is in error, '
+                                        f'please post in {self.league_committee_channel.mention}')
+                    return
+
+                if losses == 0:
+                    await message.reply(f'It looks like you don\'t have a pack to reroll yet. If this is in error, '
+                                        f'please post in {self.league_committee_channel.mention}')
+                    return
+
+                # Mark the clues as used
+                self.sheet.values().update(spreadsheetId=self.spreadsheet_id,
+                                           range=f'Pools!R{curr_row}:R{curr_row}', valueInputOption='USER_ENTERED',
+                                           body={'values': [[int(row[16]) + clues_to_spend]]}).execute()
+
+                if clues_to_spend == 2:
+                    await self.packs_channel.send(f"{last_6} {message.author.mention}")
+                elif clues_to_spend == 4:
+                    await self.packs_channel.send(f"!from {'|'.join(sets)} {message.author.mention}")
+                elif clues_to_spend == 6:
+                    # ripped from prompt_user_pick
+                    while self.awaiting_boosters_for_user is not None:
+                        time.sleep(3)
+
+                    booster_one_type = f"!{sets[0]}"
+                    booster_two_type = f"!{sets[1]}"
+                    self.num_boosters_awaiting = 2
+                    self.awaiting_boosters_for_user = message.author
+
+                    # Generate two packs of the specified types
+                    await self.bot_bunker_channel.send(booster_one_type)
+                    await self.bot_bunker_channel.send(booster_two_type)
+                elif clues_to_spend == 10:
+                    self.double_packs[message.author.id] = []
+                    await self.packs_channel.send(f"!{sets[0]} {message.author.mention}")
+                    await self.packs_channel.send(f"!{sets[1]} {message.author.mention}")
+                    # TODO MKM replace pack with both???
+                return
+        await message.reply(f'Hmm, I can\'t find you in the league spreadsheet. '
+                            f'Please post in {self.league_committee_channel.mention}')
+
+    async def explore(self, message: discord.Message):
         possible_sets = [
             "SIR",
             "AKR",
@@ -271,7 +384,7 @@ class PoolBot(discord.Client):
         await message.reply(f'Hmm, I can\'t find you in the league spreadsheet. '
                             f'Please post in {self.league_committee_channel.mention}')
 
-    async def track_starting_pool(self, message):
+    async def track_starting_pool(self, message: discord.Message):
         # Handle cases where Booster Tutor fails to generate a sealeddeck.tech link
         if '**Sealeddeck.tech:** Error' in message.content:
             # TODO: highlight the pool cell red and DM someone if this happens
@@ -308,20 +421,34 @@ class PoolBot(discord.Client):
         # TODO do something if the value could not be found
         return
 
-    async def track_pack(self, message):
+    async def track_pack(self, message: discord.Message):
+        """
+        Track a pack in the Pools tab. This assumes the pack's owner is the last mention in the message, and that the pack contents is in a code fence.
+        If a pack has already been recorded for the current loss, this will _replace_ that pack.
+        """
 
         # Get sealeddeck link and loss count from spreadsheet
-        spreadsheet_values = await self.get_spreadsheet_values('Pools!B7:S200')
+        spreadsheet_values = await self.get_spreadsheet_values('Pools!B7:AA200')
+        spreadsheet_formulas = await self.get_spreadsheet_values('Pools!B7:AA200', valueRenderOption="FORMULA")
         curr_row = 6
         current_pool = 'Not found'
+        extra_cards = []
+        extra_card_count = 0
         loss_count = 0
-        for row in spreadsheet_values:
+        pack_to_replace = None
+        for (row, formulas) in zip(spreadsheet_values, spreadsheet_formulas):
             curr_row += 1
             if len(row) < 5:
                 continue
             if row[0].lower() != '' and row[0].lower() in message.mentions[len(message.mentions) - 1].display_name.lower():
                 current_pool = row[3]
+                # Columns T through Z inclusive have extra cards
+                extra_cards = [{"name": card, "count": 1} for card in row[(ord('T') - ord('B')):(ord('Z')-ord('B')+1)] if card != '']
+                # Column AA has extra card count
+                extra_card_count = int(row[ord('Z')-ord('B')+1])
                 loss_count = int(row[2])
+                replace_id_match = re.search("\\.tech/(?P<id>[a-zA-Z0-9]*)", formulas[ord('F') - ord('B') + loss_count])
+                pack_to_replace = replace_id_match and replace_id_match.group("id")
                 break
         if current_pool == 'Not found':
             # This should only happen during debugging / spreadsheet setup
@@ -334,6 +461,17 @@ class PoolBot(discord.Client):
 
         pack_content = message.content.split("```")[1].strip()
         pack_json = arena_to_json(pack_content)
+
+        # If this is a double pack, wait for the second pack to be resolved, then treat both as one
+        if message.mentions[-1].id in self.double_packs:
+            double_pack = self.double_packs[message.mentions[-1].id]
+            if len(double_pack) == 0:
+                double_pack.append(pack_json)
+                return
+            else:
+                pack_json = [*double_pack[0], *pack_json]
+                del self.double_packs[message.mentions[-1].id]
+
         try:
             new_pack_id = await pool_to_sealeddeck(pack_json)
         except:
@@ -349,17 +487,37 @@ class PoolBot(discord.Client):
             return
 
         try:
-            # Add pack to pool link
-            updated_pool_id = await pool_to_sealeddeck(
-                pack_json, current_pool.split('.tech/')[1]
-            )
+            if not pack_to_replace:
+                # Add pack to pool link
+                updated_pool_id = await pool_to_sealeddeck(
+                    pack_json, current_pool.split('.tech/')[1]
+                )
+            else:
+                pool_contents = await sealeddeck_pool(current_pool.split('.tech/')[1])
+                cards_to_replace = await sealeddeck_pool(pack_to_replace)
+                pool_without_old_cards = remove_cards(pool_contents, cards_to_replace)
+                 # TODO MKM verify that they can just be concatenated not added
+                updated_pool_id = await pool_to_sealeddeck([*pool_without_old_cards, *pack_json])
         except:
             print("sealeddeck issue — updating pool")
             # If something goes wrong with sealeddeck, highlight the pack cell red
             await self.set_cell_to_red(curr_row, chr(ord('F') + loss_count))
             return
 
-        # Write updated pool to spreadsheet
+        # record any extra cards we haven't yet
+        if len(extra_cards) > extra_card_count:
+            try:
+                # Add extra cards
+                updated_pool_id = await pool_to_sealeddeck(
+                    extra_cards[extra_card_count:], updated_pool_id
+                )
+            except:
+                print("sealeddeck issue — updating pool")
+                # If something goes wrong with sealeddeck, highlight the pack cell red
+                await self.set_cell_to_red(curr_row, chr(ord('F') + loss_count))
+                return
+
+        # Write updated extra-card-included pool to spreadsheet
         pool_body = {
             'values': [
                 [f'https://sealeddeck.tech/{updated_pool_id}'],
@@ -368,10 +526,14 @@ class PoolBot(discord.Client):
         self.sheet.values().update(spreadsheetId=self.spreadsheet_id,
                                    range=f'Pools!E{curr_row}:E{curr_row}', valueInputOption='USER_ENTERED',
                                    body=pool_body).execute()
+        if len(extra_cards) > extra_card_count:
+            self.sheet.values().update(spreadsheetId=self.spreadsheet_id,
+                                       range=f'Pools!AA{curr_row}:AA{curr_row}', valueInputOption='USER_ENTERED',
+                                       body={'values': [[len(extra_cards)]]}).execute()
 
         return
 
-    async def write_pack(self, new_pack_id, loss_count, curr_row):
+    async def write_pack(self, new_pack_id: str, loss_count: int, curr_row: int):
         pack_body = {
             'values': [
                 [f'=HYPERLINK("https://sealeddeck.tech/{new_pack_id}", "Link")'],
@@ -383,7 +545,7 @@ class PoolBot(discord.Client):
                                    range=f'Pools!{col}{curr_row}:{col}{curr_row}', valueInputOption='USER_ENTERED',
                                    body=pack_body).execute()
 
-    async def set_cell_to_red(self, row, col):
+    async def set_cell_to_red(self, row: int, col: str):
         # Note that this request (annoyingly) uses indices instead of the regular cell format.
         color_body = {
             'requests': [{
@@ -416,7 +578,7 @@ class PoolBot(discord.Client):
         self.sheet.batchUpdate(spreadsheetId=self.spreadsheet_id,
                                body=color_body).execute()
 
-    async def prompt_user_pick(self, message):
+    async def prompt_user_pick(self, message: discord.Message):
         # # Ensure the user doesn't already have a pending pick to make
         # pendingPickMessage = await self.packs_channel.history().find(
         # 	lambda m : m.author.name == 'AGL Bot'
@@ -444,24 +606,24 @@ class PoolBot(discord.Client):
         await self.bot_bunker_channel.send(booster_one_type)
         await self.bot_bunker_channel.send(booster_two_type)
 
-    async def handle_booster_tutor_response(self, message):
+    async def handle_booster_tutor_response(self, message: discord.Message):
         assert self.num_boosters_awaiting > 0
         if self.num_boosters_awaiting == 2:
             self.num_boosters_awaiting -= 1
             await self.packs_channel.send(
-                f'Pack Option A (Urza) for {self.awaiting_boosters_for_user.mention}. To select this pack, DM me '
-                f'`!chooseUrza`\n '
+                f'Pack Option A for {self.awaiting_boosters_for_user.mention}. To select this pack, DM me '
+                f'`!choosePackA`\n '
                 f'```{message.content.split("```")[1].strip()}```')
         else:
             self.num_boosters_awaiting -= 1
             await self.packs_channel.send(
-                f'Pack Option B (Mishra) for {self.awaiting_boosters_for_user.mention}. To select this pack, DM me '
-                f'`!chooseMishra`\n '
+                f'Pack Option B for {self.awaiting_boosters_for_user.mention}. To select this pack, DM me '
+                f'`!choosePackB`\n '
                 f'```{message.content.split("```")[1].strip()}```')
         if self.num_boosters_awaiting == 0:
             self.awaiting_boosters_for_user = None
 
-    async def issue_challenge(self, message):
+    async def issue_challenge(self, message: discord.Message):
         if not self.pending_lfm_user_mention:
             await self.lfm_channel.send(
                 "Sorry, but no one is looking for a match right now. You can send out an anonymous LFM by DMing me "
@@ -481,15 +643,15 @@ class PoolBot(discord.Client):
         self.pending_lfm_user_mention = None
         self.active_lfm_message = None
 
-    async def choose_pack(self, user, chosen_option):
+    async def choose_pack(self, user: Union[discord.Member, discord.User], chosen_option: str):
         if chosen_option == 'A':
             not_chosen_option = 'B'
-            split = '!chooseUrza`'
-            not_chosen_split = '!chooseMishra`'
+            split = '!choosePackA`'
+            not_chosen_split = '!choosePackB`'
         else:
             not_chosen_option = 'A'
-            split = '!chooseMishra`'
-            not_chosen_split = '!chooseUrza`'
+            split = '!choosePackB`'
+            not_chosen_split = '!choosePackA`'
         chosen_message = None
         async for message in self.packs_channel.history(limit=500):
             if (message.author.name == 'AGL Bot' and message.mentions and message.mentions[0] == user
@@ -512,24 +674,19 @@ class PoolBot(discord.Client):
 
         chosen_message_text = f'Pack chosen by {user.mention}.{chosen_message.content.split(split)[1]}'
 
-        await update_message(chosen_message, chosen_message_text)
+        chosen_message = await update_message(chosen_message, chosen_message_text)
 
-        await update_message(not_chosen_message,
-                             f'Pack not chosen by {user.mention}.'
-                             f'~~{not_chosen_message.content.split(not_chosen_split)[1]}~~')
+        not_chosen_message = await update_message(not_chosen_message,
+                                                  f'Pack not chosen by {user.mention}.'
+                                                  f'~~{not_chosen_message.content.split(not_chosen_split)[1]}~~')
 
         await user.send("Understood. Your selection has been noted.")
 
-        # selected_pack = "\n" + chosen_message.content.split("```")[1]
-        # result =
-        # await self.update_pool(chosen_message.mentions[0], selected_pack, chosen_message, chosen_message_text)
-        # if not result:
-        #     await update_message(chosen_message,
-        #                          chosen_message_text + "\n" + f"Unable to update pool. Please message Russell S")
+        await self.track_pack(chosen_message) # TODO MKM verify message format matches, or else refactor & reuse most of it
 
         return
 
-    async def on_dm(self, message, command, argument):
+    async def on_dm(self, message: discord.Message, command: str, argument: str):
         if command == '!choosepacka' or command == '!chooseurza':
             await self.choose_pack(message.author, 'A')
             return
@@ -547,12 +704,12 @@ class PoolBot(discord.Client):
                 return
             if not argument:
                 self.active_lfm_message = await self.lfm_channel.send(
-                    "An anonymous player is looking for a match. Post `!challenge` to reveal their identity and "
+                    "A mysterious creature is looking for a match. Post `!challenge` to reveal their identity and "
                     "initiate a match. "
                 )
             else:
                 self.active_lfm_message = await self.lfm_channel.send(
-                    f"An anonymous player is looking for a match. Post `!challenge` to reveal their identity and "
+                    f"A mysterious creature is looking for a match. Post `!challenge` to reveal their identity and "
                     f"initiate a match.\n "
                     f"Message from the player:\n"
                     f"> {argument}"
@@ -586,7 +743,7 @@ class PoolBot(discord.Client):
             f"> `!choosePackB`: responds to a pending pack selection option."
         )
 
-    async def add_pack(self, message, argument):
+    async def add_pack(self, message: discord.Message, argument: str):
         if message.channel != self.packs_channel:
             return
 
@@ -633,7 +790,7 @@ class PoolBot(discord.Client):
             )
         await m.edit(content=content)
 
-    async def print_members_not_in_league(self, league_name):
+    async def print_members_not_in_league(self, league_name: str):
         for member in self.guilds[0].members:
             found = False
             if member.bot:
@@ -652,7 +809,7 @@ class PoolBot(discord.Client):
                 await message_member(member)
                 print('DMed ' + member.display_name)
 
-    async def message_members_not_in_league(self, league_name, content, sender, test_mode=False):
+    async def message_members_not_in_league(self, league_name: str, content: str, sender: Union[discord.Member, discord.User], test_mode=False):
         count = 0
         if test_mode:
             await message_member(sender, content)
@@ -672,7 +829,7 @@ class PoolBot(discord.Client):
                     count += 1
         await sender.send(f'Successfully DMed {count} user(s).')
 
-    async def get_spreadsheet_values(self, range):
+    async def get_spreadsheet_values(self, range: str, valueRenderOption="FORMATTED_VALUE"):
         creds = None
         # The file token.json stores the user's access and refresh tokens, and is
         # created automatically when the authorization flow completes for the first
@@ -698,7 +855,8 @@ class PoolBot(discord.Client):
             # Call the Sheets API
             self.sheet = service.spreadsheets()
             result = self.sheet.values().get(spreadsheetId=self.spreadsheet_id,
-                                             range=range).execute()
+                                             range=range,
+                                             valueRenderOption=valueRenderOption).execute()
             return result.get('values', [])
         except HttpError as err:
             print(err)
