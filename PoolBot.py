@@ -257,19 +257,19 @@ class PoolBot(discord.Client):
             clues_to_spend = int(args[0])
             sets = args[1:]
         except ValueError:
-            await message.reply("Hmm, I don't understand that. Try `!collect 2`, `!collect 4 SET`, `!collect 6 SET SET`, or `!collect 10 SET SET`. (SET can be mkm, lci, woe, mom, one, or bro. You can choose the same set twice.)")
+            await message.reply("Hmm, I don't understand that. Try `!collect 2`, `!collect 4 SET`, `!collect 6 SET SET`, or `!collect 10 SET SET`. (SET can be `mkm`, `lci`, `woe`, `mom`, `one`, or `bro`. You can choose the same set twice.)")
             return
         if clues_to_spend not in [2,4,6,10]:
             await message.reply("You can only use 2, 4, 6, or 10 clues when collecting evidence.")
             return
         if clues_to_spend == 2 and len(sets) != 0:
-            await message.reply("Hmm, I don't understand that. Try `!collect 2`, `!collect 4 SET`, `!collect 6 SET SET`, or `!collect 10 SET SET`. (SET can be mkm, lci, woe, mom, one, or bro. You can choose the same set twice.)")
+            await message.reply("Hmm, I don't understand that. Try `!collect 2`, `!collect 4 SET`, `!collect 6 SET SET`, or `!collect 10 SET SET`. (SET can be `mkm`, `lci`, `woe`, `mom`, `one`, or `bro`. You can choose the same set twice.)")
             return
         if clues_to_spend == 4 and (len(sets) != 1 or sets[0].lower() not in allowed_sets):
-            await message.reply("Hmm, I don't understand that. Try `!collect 2`, `!collect 4 SET`, `!collect 6 SET SET`, or `!collect 10 SET SET`. (SET can be mkm, lci, woe, mom, one, or bro. You can choose the same set twice.)")
+            await message.reply("Hmm, I don't understand that. Try `!collect 2`, `!collect 4 SET`, `!collect 6 SET SET`, or `!collect 10 SET SET`. (SET can be `mkm`, `lci`, `woe`, `mom`, `one`, or `bro`. You can choose the same set twice.)")
             return
         if clues_to_spend in [6, 10] and (len(sets) != 2 or sets[0].lower() not in allowed_sets or sets[1].lower() not in allowed_sets):
-            await message.reply("Hmm, I don't understand that. Try `!collect 2`, `!collect 4 SET`, `!collect 6 SET SET`, or `!collect 10 SET SET`. (SET can be mkm, lci, woe, mom, one, or bro. You can choose the same set twice.)")
+            await message.reply("Hmm, I don't understand that. Try `!collect 2`, `!collect 4 SET`, `!collect 6 SET SET`, or `!collect 10 SET SET`. (SET can be `mkm`, `lci`, `woe`, `mom`, `one`, or `bro`. You can choose the same set twice.)")
             return
 
         sets = [s.lower() if s.lower() != "mkm" else "a-mkm" for s in sets]
