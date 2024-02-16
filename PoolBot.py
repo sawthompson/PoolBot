@@ -281,9 +281,15 @@ class PoolBot(discord.Client):
             if len(row) < 5:
                 continue
             if row[0].lower() != '' and row[0].lower() in message.author.display_name.lower():
+                losses = int(row[2])
                 clues_available = int(row[15])
                 if clues_available < clues_to_spend:
                     await message.reply(f'By my records, you do not have enough clues. If this is in error, '
+                                        f'please post in {self.league_committee_channel.mention}')
+                    return
+
+                if losses == 0:
+                    await message.reply(f'It looks like you don\'t have a pack to reroll yet. If this is in error, '
                                         f'please post in {self.league_committee_channel.mention}')
                     return
 
