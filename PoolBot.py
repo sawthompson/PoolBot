@@ -7,8 +7,9 @@ import re
 import random
 import time
 from dotenv import load_dotenv
-from typing import Optional, Sequence, Union
+from typing import Optional, Sequence, Union, List, TypedDict
 from datetime import datetime
+from collections import Counter
 
 import os.path
 
@@ -25,18 +26,49 @@ load_dotenv()
 
 SEALEDDECK_URL = "https://sealeddeck.tech/api/pools"
 
-def arena_to_json(arena_list: str) -> Sequence[dict]:
+class SealedDeckEntry(TypedDict):
+    name: str
+    count: int
+
+def arena_to_json(arena_list: str) -> Sequence[SealedDeckEntry]:
     """Convert a list of cards in arena format to a list of json cards"""
-    json_list = []
+    json_list: List[SealedDeckEntry] = []
     for line in arena_list.rstrip("\n ").split("\n"):
         count, card = line.split(" ", 1)
         card_name = card.split(" (")[0]
         json_list.append({"name": f"{card_name}", "count": int(count)})
     return json_list
 
+def remove_cards(pool: Sequence[SealedDeckEntry], cards_to_remove: Sequence[SealedDeckEntry]) -> Sequence[SealedDeckEntry]:
+    """Remove the given cards from the pool, decrementing counts or totally removing entries."""
+    counted: Counter[str] = Counter()
+    for card in pool:
+        counted[card["name"]] += card["count"]
+    for card in cards_to_remove:
+        counted[card["name"]] -= card["count"]
+    return [{"name": name, "count": count} for name, count in counted.items() if count > 0]
+
+async def sealeddeck_pool(pool_sealeddeck_id: str) -> Optional[Sequence[SealedDeckEntry]]:
+    resp_json = None
+
+    for attempt in range(3):
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(f"{SEALEDDECK_URL}/{pool_sealeddeck_id}") as resp:
+                    resp.raise_for_status()
+                    resp_json = await resp.json()
+        except:
+            continue
+        else:
+            break
+
+    if resp_json is not None:
+        return [*resp_json["sideboard"], *resp_json["deck"], *resp_json["hidden"]]
+    else:
+        return None
 
 async def pool_to_sealeddeck(
-        punishment_cards: Sequence[dict], pool_sealeddeck_id: Optional[str] = None
+        punishment_cards: Sequence[SealedDeckEntry], pool_sealeddeck_id: Optional[str] = None
 ) -> str:
     """Adds punishment cards to a sealeddeck.tech pool and returns the id"""
     deck: dict[str, Union[Sequence[dict], str]] = {"sideboard": punishment_cards}
@@ -192,7 +224,7 @@ class PoolBot(discord.Client):
             return
 
         if command == '!collect' and message.channel == self.packs_channel:
-            await self.collect_evidence(message, argument)
+            await self.collect(message, argument)
 
         if command == '!randint':
             args = argv[1].split(None)
@@ -241,7 +273,7 @@ class PoolBot(discord.Client):
         last_6 = "!from a-mkm|lci|woe|mom|one|bro"
 
         # Get sealeddeck link and loss count from spreadsheet
-        spreadsheet_values = await self.get_spreadsheet_values('Pools!B7:AB200')
+        spreadsheet_values = await self.get_spreadsheet_values('Pools!B7:Z200')
         curr_row = 6
         for row in spreadsheet_values:
             curr_row += 1
@@ -261,10 +293,8 @@ class PoolBot(discord.Client):
 
                 if clues_to_spend == 2:
                     await self.packs_channel.send(f"{last_6} {message.author.mention}")
-                    # TODO MKM replace pack???
                 elif clues_to_spend == 4:
                     await self.packs_channel.send(f"!from {'|'.join(sets)} {message.author.mention}")
-                    # TODO MKM replace pack???
                 elif clues_to_spend == 6:
                     # ripped from prompt_user_pick
                     while self.awaiting_boosters_for_user is not None:
@@ -386,23 +416,29 @@ class PoolBot(discord.Client):
         return
 
     async def track_pack(self, message: discord.Message):
+        """
+        Track a pack in the Pools tab. This assumes the pack's owner is the last mention in the message, and that the pack contents is in a code fence.
+        If a pack has already been recorded for the current loss, this will _replace_ that pack.
+        """
 
         # Get sealeddeck link and loss count from spreadsheet
-        spreadsheet_values = await self.get_spreadsheet_values('Pools!B7:AB200')
+        spreadsheet_values = await self.get_spreadsheet_values('Pools!B7:Z200')
         curr_row = 6
         current_pool = 'Not found'
-        current_pack_only_pool = None
         extra_cards = []
+        extra_card_count = 0
         loss_count = 0
+        pack_to_replace = None
         for row in spreadsheet_values:
             curr_row += 1
             if len(row) < 5:
                 continue
             if row[0].lower() != '' and row[0].lower() in message.mentions[len(message.mentions) - 1].display_name.lower():
                 current_pool = row[3]
-                current_pack_only_pool = row[ord('Z') - ord('B') + 1]
                 extra_cards = [{"name": card, "count": 1} for card in row[(ord('T') - ord('B')):(ord('Z')-ord('B'))] if card != '']
+                extra_card_count = int(row[ord('Z')-ord('B')+1])
                 loss_count = int(row[2])
+                pack_to_replace = row[ord('F') - ord('B') + loss_count]
                 break
         if current_pool == 'Not found':
             # This should only happen during debugging / spreadsheet setup
@@ -429,45 +465,30 @@ class PoolBot(discord.Client):
             await self.set_cell_to_red(curr_row, chr(ord('F') + loss_count))
             return
 
-        if current_pack_only_pool == '':
-            current_pack_only_pool = current_pool
-
         try:
-            # Add pack to pool link
-            updated_pool_id = await pool_to_sealeddeck(
-                pack_json, current_pack_only_pool.split('.tech/')[1]
-            )
+            if pack_to_replace is None:
+                # Add pack to pool link
+                updated_pool_id = await pool_to_sealeddeck(
+                    pack_json, current_pool.split('.tech/')[1]
+                )
+            else:
+                pool_contents = await sealeddeck_pool(current_pool.split('.tech/')[1])
+                cards_to_replace = await sealeddeck_pool(pack_to_replace.split('.tech/')[1])
+                pool_without_old_cards = remove_cards(pool_contents, cards_to_replace)
+                 # TODO MKM verify that they can just be concatenated not added
+                updated_pool_id = await pool_to_sealeddeck([*pool_without_old_cards, *pack_json])
         except:
             print("sealeddeck issue — updating pool")
             # If something goes wrong with sealeddeck, highlight the pack cell red
             await self.set_cell_to_red(curr_row, chr(ord('F') + loss_count))
             return
 
-        # Move current pack-only pool to previous, to allow rebuilding on reroll
-        previous_pool_body = {
-            'values': [
-                [current_pack_only_pool]
-            ]
-        }
-        self.sheet.values().update(spreadsheetId=self.spreadsheet_id,
-                                   range=f'Pools!Z{curr_row}:Z{curr_row}, valueInputOption='USER_ENTERED',
-                                   body=previous_pool_body).execute()
-
-        # Write updated pack-only pool to spreadsheet
-        pool_body = {
-            'values': [
-                [f'https://sealeddeck.tech/{updated_pool_id}'],
-            ],
-        }
-        self.sheet.values().update(spreadsheetId=self.spreadsheet_id,
-                                   range=f'Pools!AA{curr_row}:AA{curr_row}', valueInputOption='USER_ENTERED',
-                                   body=pool_body).execute()
-
-        if len(extra_cards) > 0:
+        # record any extra cards we haven't yet
+        if len(extra_cards) > extra_card_count:
             try:
                 # Add extra cards
                 updated_pool_id = await pool_to_sealeddeck(
-                    extra_cards, updated_pool_id
+                    extra_cards[extra_card_count:], updated_pool_id
                 )
             except:
                 print("sealeddeck issue — updating pool")
@@ -484,6 +505,9 @@ class PoolBot(discord.Client):
         self.sheet.values().update(spreadsheetId=self.spreadsheet_id,
                                    range=f'Pools!E{curr_row}:E{curr_row}', valueInputOption='USER_ENTERED',
                                    body=pool_body).execute()
+        self.sheet.values().update(spreadsheetId=self.spreadsheet_id,
+                                   range=f'Pools!Z{curr_row}:Z{curr_row}', valueInputOption='USER_ENTERED',
+                                   body={'values': [[len(extra_cards)]]})
 
         return
 
@@ -628,20 +652,15 @@ class PoolBot(discord.Client):
 
         chosen_message_text = f'Pack chosen by {user.mention}.{chosen_message.content.split(split)[1]}'
 
-        await update_message(chosen_message, chosen_message_text)
+        chosen_message = await update_message(chosen_message, chosen_message_text)
 
-        await update_message(not_chosen_message,
-                             f'Pack not chosen by {user.mention}.'
-                             f'~~{not_chosen_message.content.split(not_chosen_split)[1]}~~')
+        not_chosen_message = await update_message(not_chosen_message,
+                                                  f'Pack not chosen by {user.mention}.'
+                                                  f'~~{not_chosen_message.content.split(not_chosen_split)[1]}~~')
 
         await user.send("Understood. Your selection has been noted.")
 
-        # selected_pack = "\n" + chosen_message.content.split("```")[1]
-        # result =
-        # await self.update_pool(chosen_message.mentions[0], selected_pack, chosen_message, chosen_message_text)
-        # if not result:
-        #     await update_message(chosen_message,
-        #                          chosen_message_text + "\n" + f"Unable to update pool. Please message Russell S")
+        await self.track_pack(chosen_message) # TODO MKM verify message format matches, or else refactor & reuse most of it
 
         return
 
