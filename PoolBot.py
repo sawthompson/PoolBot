@@ -280,8 +280,8 @@ class PoolBot(discord.Client):
             if len(row) < 5:
                 continue
             if row[0].lower() != '' and row[0].lower() in message.author.display_name.lower():
-                clues = clues_available(row)
-                if clues_available(row) < clues_to_spend:
+                clues_available = int(row[15])
+                if clues_available < clues_to_spend:
                     await message.reply(f'By my records, you do not have enough clues. If this is in error, '
                                         f'please post in {self.league_committee_channel.mention}')
                     return
@@ -289,7 +289,7 @@ class PoolBot(discord.Client):
                 # Mark the clues as used
                 self.sheet.values().update(spreadsheetId=self.spreadsheet_id,
                                            range=f'Pools!Q{curr_row}:Q{curr_row}', valueInputOption='USER_ENTERED',
-                                           body={'values': [[int(row[15]) + clues_to_spend]]}).execute()
+                                           body={'values': [[int(row[16]) + clues_to_spend]]}).execute()
 
                 if clues_to_spend == 2:
                     await self.packs_channel.send(f"{last_6} {message.author.mention}")
@@ -435,7 +435,9 @@ class PoolBot(discord.Client):
                 continue
             if row[0].lower() != '' and row[0].lower() in message.mentions[len(message.mentions) - 1].display_name.lower():
                 current_pool = row[3]
-                extra_cards = [{"name": card, "count": 1} for card in row[(ord('T') - ord('B')):(ord('Z')-ord('B'))] if card != '']
+                # Columns T through Z inclusive have extra cards
+                extra_cards = [{"name": card, "count": 1} for card in row[(ord('T') - ord('B')):(ord('Z')-ord('B')+1)] if card != '']
+                # Column AA has extra card count
                 extra_card_count = int(row[ord('Z')-ord('B')+1])
                 loss_count = int(row[2])
                 pack_to_replace = row[ord('F') - ord('B') + loss_count]
@@ -838,7 +840,3 @@ class PoolBot(discord.Client):
         except HttpError as err:
             print(err)
         return []
-
-def clues_available(row: Sequence[str]):
-    # TODO MKM interpret from row (probably also need entire other sheet)
-    return 0
