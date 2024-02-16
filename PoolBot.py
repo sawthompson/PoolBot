@@ -122,6 +122,7 @@ class PoolBot(discord.Client):
         self.pending_lfm_user_mention = None
         self.config = config
         self.league_start = datetime.fromisoformat('2022-06-22')
+        self.double_packs: dict[int, Sequence[SealedDeckEntry]] = dict()
         super().__init__(intents=intents, *args, **kwargs)
 
     async def on_ready(self):
@@ -308,8 +309,8 @@ class PoolBot(discord.Client):
                     # Generate two packs of the specified types
                     await self.bot_bunker_channel.send(booster_one_type)
                     await self.bot_bunker_channel.send(booster_two_type)
-                    # TODO MKM replace pack??? (in choose_pack)
                 elif clues_to_spend == 10:
+                    self.double_packs[message.author.id] = []
                     await self.packs_channel.send(f"!{sets[0]} {message.author.mention}")
                     await self.packs_channel.send(f"!{sets[1]} {message.author.mention}")
                     # TODO MKM replace pack with both???
@@ -453,6 +454,17 @@ class PoolBot(discord.Client):
 
         pack_content = message.content.split("```")[1].strip()
         pack_json = arena_to_json(pack_content)
+
+        # If this is a double pack, wait for the second pack to be resolved, then treat both as one
+        if message.mentions[-1].id in self.double_packs:
+            double_pack = self.double_packs[message.mentions[-1].id]
+            if len(double_pack) == 0:
+                double_pack.push(pack_json)
+                return
+            else:
+                pack_json = [*double_pack[0], *pack_json]
+                del self.double_packs[message.mentions[-1].id]
+
         try:
             new_pack_id = await pool_to_sealeddeck(pack_json)
         except:
